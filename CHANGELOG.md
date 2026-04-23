@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.3 - 2026-04-23
+
+### Alterado
+
+- Acumuladores de consumo e geracao passaram a tratar reset/rebase de entidades `total` sem zerar artificialmente o ciclo corrente, reaproveitando a leitura atual como base segura do novo periodo.
+- Acumuladores da Tarifa Branca passaram a reclassificar a leitura de reset no posto tarifario atual, marcando baixa confianca quando houver necessidade de estimativa.
+- Diagnosticos passaram a refletir melhor o estado corrente dos acumuladores mensais de consumo e geracao, alem do sinalizador efetivo de confianca da Tarifa Branca.
+- Estados numericos publicados nos sensores agora sao exibidos com no maximo 4 casas decimais para melhorar leitura no Home Assistant.
+
+### Testes
+
+- Cobertura adicionada para:
+  - reset de entidades acumuladas preservando o valor corrente do ciclo;
+  - reclassificacao de reset na Tarifa Branca;
+  - arredondamento de exibicao dos sensores para 4 casas decimais.
+
 ## 0.1.0-alpha.2 - 2026-04-23
 
 ### Alterado

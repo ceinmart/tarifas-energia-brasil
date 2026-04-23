@@ -61,6 +61,9 @@ def _install_fake_homeassistant_modules() -> None:
     class SensorStateClass(StrEnum):
         MEASUREMENT = "measurement"
 
+    class Platform(StrEnum):
+        SENSOR = "sensor"
+
     @dataclass(frozen=True, kw_only=True)
     class SensorEntityDescription:
         key: str
@@ -113,6 +116,7 @@ def _install_fake_homeassistant_modules() -> None:
 
     config_entries.ConfigEntry = ConfigEntry
     const.PERCENTAGE = "%"
+    const.Platform = Platform
     core.HomeAssistant = object
     device_registry.DeviceEntryType = DeviceEntryType
     device_registry.DeviceInfo = DeviceInfo
@@ -313,3 +317,36 @@ def test_technical_regular_sensors_are_marked_as_diagnostic():
 
     assert descriptions["te_convencional_r_kwh"].entity_category == EntityCategory.DIAGNOSTIC
     assert descriptions["tarifa_convencional_final_r_kwh"].entity_category is None
+
+
+def test_numeric_native_value_is_rounded_to_four_decimal_places():
+    entry = ConfigEntry(
+        data={
+            CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+            CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
+            CONF_ENABLE_TARIFA_BRANCA_GROUP: False,
+        },
+        options={},
+    )
+    description = next(
+        item
+        for item in build_sensor_descriptions(entry)
+        if item.value_key == "tarifa_convencional_final_r_kwh"
+    )
+
+    class DummyCoordinator:
+        data = types.SimpleNamespace(
+            values={"tarifa_convencional_final_r_kwh": 0.787910097997443},
+            concessionaria="CPFL-PIRATINING",
+            updated_at=types.SimpleNamespace(isoformat=lambda: "2026-04-23T18:00:00-03:00"),
+            collections_by_key={},
+            diagnostics={},
+        )
+
+    entity = TarifasEnergiaBrasilSensor(
+        coordinator=DummyCoordinator(),
+        entry=entry,
+        description=description,
+    )
+
+    assert entity.native_value == 0.7879

@@ -443,11 +443,12 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             }
 
         delta = current_total_kwh - float(last_total_kwh)
+        reset_detected = delta < 0
         return {
             "has_previous": True,
-            "delta_kwh": max(delta, 0.0),
+            "delta_kwh": max(current_total_kwh if reset_detected else delta, 0.0),
             "raw_delta_kwh": delta,
-            "reset_detected": delta < 0,
+            "reset_detected": reset_detected,
             "start": last_timestamp,
             "end": current_timestamp,
         }
@@ -513,9 +514,10 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             rollovers = self._ensure_scalar_current_keys(period_state, now, reading_day)
             return self._current_period_values(period_state), rollovers
         if delta_context.get("reset_detected"):
+            reset_kwh = float(delta_context.get("delta_kwh", 0.0) or 0.0)
             for period in VALID_BREAKDOWNS:
                 period_state[period]["key"] = self._period_key(period, now, reading_day)
-                period_state[period]["kwh"] = 0.0
+                period_state[period]["kwh"] = reset_kwh
             return self._current_period_values(period_state), rollovers
 
         start = delta_context["start"]
@@ -558,11 +560,18 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             rollovers = self._ensure_posto_current_keys(period_state, now, reading_day)
             return self._current_posto_period_values(period_state), rollovers
         if delta_context.get("reset_detected"):
+            reset_kwh = float(delta_context.get("delta_kwh", 0.0) or 0.0)
+            current_posto = resolve_tarifa_branca_posto(now, schedule, holidays)
+            self._tarifa_branca_last_interval_seconds = 0.0
+            self._tarifa_branca_last_segment_count = 1 if reset_kwh > 0 else 0
+            self._tarifa_branca_low_confidence = reset_kwh > 0
             for period in VALID_BREAKDOWNS:
                 period_state[period]["key"] = self._period_key(period, now, reading_day)
                 period_state[period]["postos"] = {
                     posto: 0.0 for posto in POSTOS_TARIFA_BRANCA
                 }
+                if reset_kwh > 0:
+                    period_state[period]["postos"][current_posto] = reset_kwh
             return self._current_posto_period_values(period_state), rollovers
 
         start = delta_context["start"]
@@ -847,7 +856,13 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             {
                 "consumo_reset_detectado": self._consumo_reset_detectado,
                 "geracao_reset_detectado": self._geracao_reset_detectado,
-                "estimativa_tarifa_branca_sem_posto_real": False,
+                "consumo_mensal_kwh_apurado": float(
+                    self._consumo_period_state[BREAKDOWN_MONTHLY]["kwh"]
+                ),
+                "geracao_mensal_kwh_apurado": float(
+                    self._geracao_period_state[BREAKDOWN_MONTHLY]["kwh"]
+                ),
+                "estimativa_tarifa_branca_sem_posto_real": self._tarifa_branca_low_confidence,
                 "tarifa_branca_schedule_source": self._tarifa_branca_schedule_source,
                 "tarifa_branca_schedule_windows": schedule_metadata["windows"],
                 "tarifa_branca_invalid_extra_holidays": self._tarifa_branca_invalid_extra_holidays,
@@ -1083,7 +1098,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             "consumo_mensal_kwh_apurado": consumo_mensal_kwh,
             "consumo_bootstrap_sem_historico": not had_consumo_history,
             "mensagem_erro": None,
-            "estimativa_tarifa_branca_sem_posto_real": False,
+            "estimativa_tarifa_branca_sem_posto_real": self._tarifa_branca_low_confidence,
             "competencia_bandeira": bandeira_data["competencia"],
             "tributos_competencia": tributos_data.competencia,
             "icms_percent_base_fonte": tributos_data.icms_percent,

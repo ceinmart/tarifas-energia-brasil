@@ -6,7 +6,7 @@ Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de
 
 ## Status
 
-- Versao atual: `0.1.0-alpha.2` (pre-release).
+- Versao atual: `0.1.0-alpha.3` (pre-release).
 - Escopo inicial: base funcional da integracao + MVP com concessionarias suportadas.
 - Concessionaria obrigatoria do MVP: `CPFL-PIRATINING`.
 

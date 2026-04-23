@@ -43,6 +43,7 @@ from .coordinator import TarifasEnergiaBrasilCoordinator
 UNIT_R_KWH = "R$/kWh"
 UNIT_R = "R$"
 UNIT_KWH = "kWh"
+DISPLAY_DECIMALS = 4
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -475,6 +476,8 @@ class TarifasEnergiaBrasilSensor(
         raw = self.coordinator.data.values.get(self.entity_description.value_key)
         if isinstance(raw, bool):
             return "sim" if raw else "nao"
+        if isinstance(raw, float):
+            return round(raw, DISPLAY_DECIMALS)
         return raw
 
     @property
