@@ -1,0 +1,33 @@
+<!--
+Versao: 0.1.0
+Criado em: 2026-04-23 10:35:00 -03:00
+Criado por: Codex
+Projeto/pasta: ha.ext.tarifas
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Tarifas Energia Brasil">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0A5D38"/>
+      <stop offset="100%" stop-color="#097E4D"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFE08A"/>
+      <stop offset="100%" stop-color="#F7C948"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="178" fill="#0E9F6E" opacity="0.18"/>
+  <path d="M256 92L430 256L256 420L82 256Z" fill="url(#gold)" opacity="0.95"/>
+  <circle cx="256" cy="256" r="92" fill="#1A4C9E"/>
+
+  <path d="M228 176H312L274 246H322L214 364L252 278H200L228 176Z" fill="#FFFFFF"/>
+
+  <path d="M132 346C158 328 184 320 210 320" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" opacity="0.9"/>
+  <path d="M302 320C332 320 360 330 388 352" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" opacity="0.9"/>
+
+  <circle cx="132" cy="346" r="14" fill="#FFFFFF"/>
+  <circle cx="388" cy="352" r="14" fill="#FFFFFF"/>
+
+  <rect x="140" y="104" width="232" height="40" rx="20" fill="#FFFFFF" opacity="0.12"/>
+</svg>
