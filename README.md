@@ -47,6 +47,11 @@ Pos-configuracao (options flow):
 - Controle de grupos de entidades no mesmo device principal:
   - `Grupo de geracao/SCEE`: aparece quando existe entidade de geracao configurada.
   - `Grupo de tarifa branca`: toggle explicito para publicar ou ocultar esse conjunto de sensores.
+- Ajuste manual dos horarios da Tarifa Branca:
+  - `inicio/fim ponta`
+  - `inicio/fim intermediario 1`
+  - `inicio/fim intermediario 2`
+  - `feriados extras` em `YYYY-MM-DD`
 
 Defaults de grupos:
 
@@ -216,6 +221,11 @@ Observacoes:
 3. Tarifa branca por posto:
    - `tarifa_branca_bruta_posto = te_posto + tusd_posto`
    - `tarifa_branca_final_posto = aplicar_tributos_por_dentro(...)`
+   - o consumo e rateado por posto com base no delta da entidade acumulada de consumo, respeitando:
+     - horarios default da concessionaria
+     - override manual do usuario
+     - sabados e domingos como `fora ponta`
+     - feriados nacionais e feriados extras como `fora ponta`
 4. Tributos por dentro:
    - `valor_com_tributos = valor_sem_tributos / (1 - pis - cofins - icms)`
    - o `ICMS` aplicado pode ser ajustado por faixa de consumo mensal para concessionarias com regra mapeada
@@ -230,11 +240,14 @@ Observacoes:
 8. SCEE (modelo inicial):
    - `valor_consumo_scee = valor_energia_nao_compensada + valor_fio_b_compensada`
    - `valor_consumo_faturado = max(valor_disponibilidade, valor_consumo_scee)`
+   - consumo e geracao acumulados agora sao apurados de forma incremental no tempo, com rateio por virada de dia/semana/ciclo mensal
+   - creditos continuam persistidos e consumidos do mais antigo para o mais novo
 
 Limitacoes atuais da pre-release:
 
-- Sem consumo por posto horario real, a conta de tarifa branca por periodo e estimativa.
-- Motor de creditos SCEE esta em modo operacional inicial (incremental) e deve evoluir com validacao em faturas reais.
+- A Tarifa Branca depende da qualidade temporal da entidade acumulada de consumo; leituras muito espacadas reduzem a confianca do rateio por posto.
+- O motor SCEE esta mais robusto no ciclo incremental, mas ainda precisa de validacao contra faturas reais para fechamento fino de casos regulatórios.
+- Entidades auxiliares de horario efetivo, posto atual e consumo por posto ainda nao foram expostas; hoje o calculo ja usa essa logica internamente.
 - Extratores web podem exigir ajuste quando houver mudanca de layout das concessionarias.
 
 Regra adicional implementada:

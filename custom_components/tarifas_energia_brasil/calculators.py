@@ -199,6 +199,25 @@ def calcular_valor_conta_regular(
     return kwh_periodo * (tarifa_convencional_final_r_kwh + adicional_bandeira_r_kwh)
 
 
+def calcular_valor_conta_tarifa_branca(
+    consumo_por_posto_kwh: dict[str, float],
+    tarifa_final_por_posto_r_kwh: dict[str, float],
+    adicional_bandeira_r_kwh: float = 0.0,
+) -> float:
+    """Calcula o valor monetario da Tarifa Branca por posto tarifario."""
+
+    consumo_total = sum(max(consumo_por_posto_kwh.get(posto, 0.0), 0.0) for posto in consumo_por_posto_kwh)
+    valor_energia = (
+        max(consumo_por_posto_kwh.get("fora_ponta", 0.0), 0.0)
+        * tarifa_final_por_posto_r_kwh.get("fora_ponta", 0.0)
+        + max(consumo_por_posto_kwh.get("intermediario", 0.0), 0.0)
+        * tarifa_final_por_posto_r_kwh.get("intermediario", 0.0)
+        + max(consumo_por_posto_kwh.get("ponta", 0.0), 0.0)
+        * tarifa_final_por_posto_r_kwh.get("ponta", 0.0)
+    )
+    return valor_energia + (consumo_total * adicional_bandeira_r_kwh)
+
+
 def calcular_valor_faturado_com_disponibilidade(
     valor_disponibilidade: float,
     valor_calculado: float,

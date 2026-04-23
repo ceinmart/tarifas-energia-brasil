@@ -133,3 +133,20 @@ def test_scee_creditos_prioritarios():
     assert result["credito_consumido_kwh"] == pytest.approx(80)
     assert result["geracao_consumida_kwh"] == pytest.approx(20)
     assert result["credito_gerado_kwh"] == pytest.approx(20)
+
+
+def test_valor_conta_tarifa_branca_por_posto():
+    result = calc.calcular_valor_conta_tarifa_branca(
+        consumo_por_posto_kwh={
+            "fora_ponta": 80.0,
+            "intermediario": 10.0,
+            "ponta": 5.0,
+        },
+        tarifa_final_por_posto_r_kwh={
+            "fora_ponta": 0.80,
+            "intermediario": 1.00,
+            "ponta": 1.50,
+        },
+        adicional_bandeira_r_kwh=0.02,
+    )
+    assert result == pytest.approx(83.4)

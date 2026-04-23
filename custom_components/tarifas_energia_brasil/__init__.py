@@ -29,6 +29,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     coordinator = TarifasEnergiaBrasilCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
+    await coordinator.async_start_state_tracking()
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
@@ -45,6 +46,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.entry_id
     )
     if coordinator is not None:
+        await coordinator.async_stop_state_tracking()
         await coordinator.async_persist_state()
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

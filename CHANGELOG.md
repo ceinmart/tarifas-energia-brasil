@@ -11,6 +11,11 @@
 - Novas instalacoes passam a iniciar com `Tarifa Branca` desabilitada por default para reduzir ruido visual.
 - Entries antigas preservam o grupo `Tarifa Branca` visivel por compatibilidade ate o usuario optar por ocultar.
 - Sensores tecnicos de apoio passaram a usar categoria `diagnostic` quando apropriado.
+- A Tarifa Branca passou a usar apuracao temporal real a partir do delta da entidade acumulada de consumo.
+- Sabados, domingos, feriados nacionais e feriados extras agora entram na classificacao temporal da Tarifa Branca.
+- O `options_flow` passou a permitir override manual das janelas horarias da Tarifa Branca.
+- Consumo e geracao acumulados passaram a respeitar rateio temporal em viradas de dia, semana e ciclo mensal.
+- Fechamento do ciclo mensal de creditos SCEE foi reforcado para usar os acumuladores correntes do periodo antes da troca de ciclo.
 
 ### Testes
 
@@ -18,6 +23,8 @@
   - defaults e normalizacao dos grupos no `config_flow/options_flow`;
   - criacao condicional de sensores por grupo;
   - estabilidade de `unique_id` e `device_info` no modelo de um unico device.
+  - horarios, feriados e rateio temporal da Tarifa Branca;
+  - calculo monetario da Tarifa Branca por posto.
 
 ## 0.1.0-alpha.1-base-integracao - 2026-04-22
 

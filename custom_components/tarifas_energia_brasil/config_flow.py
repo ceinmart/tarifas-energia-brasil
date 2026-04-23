@@ -22,6 +22,13 @@ from .const import (
     CONF_GENERATION_ENTITY,
     CONF_READING_DAY,
     CONF_SUPPLY_TYPE,
+    CONF_TB_EXTRA_HOLIDAYS,
+    CONF_TB_INTERMEDIATE1_END,
+    CONF_TB_INTERMEDIATE1_START,
+    CONF_TB_INTERMEDIATE2_END,
+    CONF_TB_INTERMEDIATE2_START,
+    CONF_TB_PONTA_END,
+    CONF_TB_PONTA_START,
     CONF_UPDATE_HOURS,
     DEFAULT_ANEEL_METHOD,
     DEFAULT_BREAKDOWNS,
@@ -35,6 +42,7 @@ from .const import (
     is_generation_group_enabled,
     is_tarifa_branca_group_enabled,
 )
+from .tarifa_branca_time import get_default_tarifa_branca_windows
 
 
 class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -151,8 +159,38 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(
                     CONF_ENABLE_TARIFA_BRANCA_GROUP,
                     default=is_tarifa_branca_group_enabled(defaults),
+                    )
+                ] = bool
+
+            concessionaria_for_defaults = str(
+                defaults.get(
+                    CONF_CONCESSIONARIA,
+                    get_supported_concessionarias_for_flow()[0],
                 )
-            ] = bool
+            )
+            tb_defaults, _tb_source = get_default_tarifa_branca_windows(
+                concessionaria_for_defaults
+            )
+            for field in (
+                CONF_TB_PONTA_START,
+                CONF_TB_PONTA_END,
+                CONF_TB_INTERMEDIATE1_START,
+                CONF_TB_INTERMEDIATE1_END,
+                CONF_TB_INTERMEDIATE2_START,
+                CONF_TB_INTERMEDIATE2_END,
+            ):
+                schema[
+                    vol.Optional(
+                        field,
+                        default=defaults.get(field, tb_defaults[field]),
+                    )
+                ] = str
+            schema[
+                vol.Optional(
+                    CONF_TB_EXTRA_HOLIDAYS,
+                    default=defaults.get(CONF_TB_EXTRA_HOLIDAYS, ""),
+                )
+            ] = str
 
         return vol.Schema(schema)
 
