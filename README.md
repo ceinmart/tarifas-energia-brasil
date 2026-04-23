@@ -142,20 +142,58 @@ Quando entidades sao criadas:
 - Dependentes de geracao configurada: sensores de conta com geracao, Fio B compensada, auto-consumo e creditos.
 - Dependentes de quebras: sensores de valor diario/semanal/mensal.
 
-Tabela resumida de entidades:
+Tabela completa de entidades (potenciais):
 
-| Nome amigavel | ID sugerido | Unidade | Origem | Formula |
-|---|---|---|---|---|
-| TE convencional | `sensor.te_convencional` | R$/kWh | ANEEL | valor dataset convertido de R$/MWh |
-| TUSD convencional | `sensor.tusd_convencional` | R$/kWh | ANEEL | valor dataset convertido de R$/MWh |
-| Tarifa convencional bruta | `sensor.tarifa_convencional_bruta` | R$/kWh | Calculo | `TE + TUSD` |
-| Tarifa convencional final | `sensor.tarifa_convencional_final` | R$/kWh | Calculo | `bruta / (1 - pis - cofins - icms)` |
-| Tarifa branca fora ponta final | `sensor.tarifa_branca_fora_ponta_final` | R$/kWh | Calculo | `(TE + TUSD) por posto com tributos por dentro` |
-| Bandeira vigente | `sensor.bandeira_vigente` | texto | ANEEL | ultimo acionamento valido |
-| Adicional da bandeira | `sensor.adicional_bandeira` | R$/kWh | ANEEL | adicional homologado convertido de R$/MWh |
-| Fio B bruto | `sensor.fio_b_bruto` | R$/kWh | ANEEL | `TUSD_FioB / 1000` |
-| Fio B final | `sensor.fio_b_final` | R$/kWh | Calculo | `fio_b_bruto * transicao_ano` + tributos por dentro |
-| Valor conta consumo regular mensal | `sensor.valor_conta_consumo_regular_mensal` | R$ | Calculo | `kWh_periodo * (tarifa_final + bandeira)` |
+Observacoes:
+
+- O Home Assistant define o `entity_id` final automaticamente. A coluna `ID sugerido` e apenas referencia.
+- A coluna `Chave interna` e o `value_key` publicado pelo coordinator.
+- Entidades por periodo usam as quebras configuradas em `Quebras de calculo` (`daily`, `weekly`, `monthly`).
+- Default de quebras quando nao informado: `daily` e `monthly`.
+
+| Nome amigavel | Chave interna (`value_key`) | ID sugerido | Unidade | Condicao de criacao | Observacao |
+|---|---|---|---|---|---|
+| TE convencional | `te_convencional_r_kwh` | `sensor.te_convencional` | R$/kWh | Sempre | Coletado da ANEEL e convertido para R$/kWh. |
+| TUSD convencional | `tusd_convencional_r_kwh` | `sensor.tusd_convencional` | R$/kWh | Sempre | Coletado da ANEEL e convertido para R$/kWh. |
+| Tarifa convencional bruta | `tarifa_convencional_bruta_r_kwh` | `sensor.tarifa_convencional_bruta` | R$/kWh | Sempre | `TE + TUSD`. |
+| Tarifa convencional final | `tarifa_convencional_final_r_kwh` | `sensor.tarifa_convencional_final` | R$/kWh | Sempre | Com tributos por dentro. |
+| TE branca fora ponta | `te_branca_fora_ponta_r_kwh` | `sensor.te_branca_fora_ponta` | R$/kWh | Sempre | Parcela TE por posto. |
+| TUSD branca fora ponta | `tusd_branca_fora_ponta_r_kwh` | `sensor.tusd_branca_fora_ponta` | R$/kWh | Sempre | Parcela TUSD por posto. |
+| Tarifa branca fora ponta bruta | `tarifa_branca_fora_ponta_bruta_r_kwh` | `sensor.tarifa_branca_fora_ponta_bruta` | R$/kWh | Sempre | `TE + TUSD` fora ponta. |
+| Tarifa branca fora ponta final | `tarifa_branca_fora_ponta_final_r_kwh` | `sensor.tarifa_branca_fora_ponta_final` | R$/kWh | Sempre | Com tributos por dentro. |
+| TE branca intermediario | `te_branca_intermediario_r_kwh` | `sensor.te_branca_intermediario` | R$/kWh | Sempre | Parcela TE por posto. |
+| TUSD branca intermediario | `tusd_branca_intermediario_r_kwh` | `sensor.tusd_branca_intermediario` | R$/kWh | Sempre | Parcela TUSD por posto. |
+| Tarifa branca intermediario bruta | `tarifa_branca_intermediario_bruta_r_kwh` | `sensor.tarifa_branca_intermediario_bruta` | R$/kWh | Sempre | `TE + TUSD` intermediario. |
+| Tarifa branca intermediario final | `tarifa_branca_intermediario_final_r_kwh` | `sensor.tarifa_branca_intermediario_final` | R$/kWh | Sempre | Com tributos por dentro. |
+| TE branca ponta | `te_branca_ponta_r_kwh` | `sensor.te_branca_ponta` | R$/kWh | Sempre | Parcela TE por posto. |
+| TUSD branca ponta | `tusd_branca_ponta_r_kwh` | `sensor.tusd_branca_ponta` | R$/kWh | Sempre | Parcela TUSD por posto. |
+| Tarifa branca ponta bruta | `tarifa_branca_ponta_bruta_r_kwh` | `sensor.tarifa_branca_ponta_bruta` | R$/kWh | Sempre | `TE + TUSD` ponta. |
+| Tarifa branca ponta final | `tarifa_branca_ponta_final_r_kwh` | `sensor.tarifa_branca_ponta_final` | R$/kWh | Sempre | Com tributos por dentro. |
+| Fio B bruto | `fio_b_bruto_r_kwh` | `sensor.fio_b_bruto` | R$/kWh | Sempre | `TUSD_FioB / 1000`. |
+| Fio B final | `fio_b_final_r_kwh` | `sensor.fio_b_final` | R$/kWh | Sempre | Com transicao regulatoria + tributos. |
+| PIS | `pis_percent` | `sensor.pis` | % | Sempre | Aliquota da concessionaria/fallback. |
+| COFINS | `cofins_percent` | `sensor.cofins` | % | Sempre | Aliquota da concessionaria/fallback. |
+| ICMS | `icms_percent` | `sensor.icms` | % | Sempre | Pode aplicar regra por faixa mensal. |
+| Bandeira vigente | `bandeira_vigente` | `sensor.bandeira_vigente` | texto | Sempre | Cor/status da bandeira ativa. |
+| Adicional da bandeira | `adicional_bandeira_r_kwh` | `sensor.adicional_bandeira` | R$/kWh | Sempre | Adicional homologado convertido de R$/MWh. |
+| Indicador taxa minima | `indicador_taxa_minima` | `sensor.indicador_taxa_minima` | texto (`sim`/`nao`) | Sempre | Indica se disponibilidade minima foi aplicada no mensal. |
+| kWh adicionados para disponibilidade | `kwh_adicionados_disponibilidade` | `sensor.kwh_adicionados_para_disponibilidade` | kWh | Sempre | Diferenca para atingir disponibilidade minima. |
+| Saldo de creditos do mes anterior | `saldo_creditos_mes_anterior_kwh` | `sensor.saldo_creditos_do_mes_anterior` | kWh | Sempre | Sem geracao configurada tende a permanecer `0`. |
+| Previsao de creditos gerados | `previsao_creditos_gerados_kwh` | `sensor.previsao_de_creditos_gerados` | kWh | Sempre | Sem geracao configurada permanece `0`. |
+| Auto-consumo | `auto_consumo_kwh` | `sensor.auto_consumo` | kWh | Sempre | Sem geracao configurada permanece `0`. |
+| Auto-consumo em reais | `auto_consumo_reais` | `sensor.auto_consumo_em_reais` | R$ | Sempre | Sem geracao configurada permanece `0`. |
+| Valor conta consumo regular diario | `valor_conta_consumo_regular_daily_r` | `sensor.valor_conta_consumo_regular_diario` | R$ | Quando `daily` estiver habilitado | Sensor dinamico por quebra de periodo. |
+| Valor conta consumo regular semanal | `valor_conta_consumo_regular_weekly_r` | `sensor.valor_conta_consumo_regular_semanal` | R$ | Quando `weekly` estiver habilitado | Sensor dinamico por quebra de periodo. |
+| Valor conta consumo regular mensal | `valor_conta_consumo_regular_monthly_r` | `sensor.valor_conta_consumo_regular_mensal` | R$ | Quando `monthly` estiver habilitado | Sensor dinamico por quebra de periodo. |
+| Valor conta tarifa branca diario | `valor_conta_tarifa_branca_daily_r` | `sensor.valor_conta_tarifa_branca_diario` | R$ | Quando `daily` estiver habilitado | Sensor dinamico por quebra de periodo. |
+| Valor conta tarifa branca semanal | `valor_conta_tarifa_branca_weekly_r` | `sensor.valor_conta_tarifa_branca_semanal` | R$ | Quando `weekly` estiver habilitado | Sensor dinamico por quebra de periodo. |
+| Valor conta tarifa branca mensal | `valor_conta_tarifa_branca_monthly_r` | `sensor.valor_conta_tarifa_branca_mensal` | R$ | Quando `monthly` estiver habilitado | Sensor dinamico por quebra de periodo. |
+| Valor conta com geracao diario | `valor_conta_com_geracao_daily_r` | `sensor.valor_conta_com_geracao_diario` | R$ | Quando `daily` estiver habilitado e houver entidade de geracao | Sem entidade de geracao esse sensor nao e criado. |
+| Valor conta com geracao semanal | `valor_conta_com_geracao_weekly_r` | `sensor.valor_conta_com_geracao_semanal` | R$ | Quando `weekly` estiver habilitado e houver entidade de geracao | Sem entidade de geracao esse sensor nao e criado. |
+| Valor conta com geracao mensal | `valor_conta_com_geracao_monthly_r` | `sensor.valor_conta_com_geracao_mensal` | R$ | Quando `monthly` estiver habilitado e houver entidade de geracao | Sem entidade de geracao esse sensor nao e criado. |
+| Valor Fio B compensada diario | `valor_fio_b_compensada_daily_r` | `sensor.valor_fio_b_compensada_diario` | R$ | Quando `daily` estiver habilitado e houver entidade de geracao | Sem entidade de geracao esse sensor nao e criado. |
+| Valor Fio B compensada semanal | `valor_fio_b_compensada_weekly_r` | `sensor.valor_fio_b_compensada_semanal` | R$ | Quando `weekly` estiver habilitado e houver entidade de geracao | Sem entidade de geracao esse sensor nao e criado. |
+| Valor Fio B compensada mensal | `valor_fio_b_compensada_monthly_r` | `sensor.valor_fio_b_compensada_mensal` | R$ | Quando `monthly` estiver habilitado e houver entidade de geracao | Sem entidade de geracao esse sensor nao e criado. |
 
 ## Calculos detalhados
 
