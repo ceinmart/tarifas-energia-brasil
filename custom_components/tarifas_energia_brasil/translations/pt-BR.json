@@ -1,0 +1,46 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Tarifas Energia Brasil",
+        "description": "Configure concessionaria, entidades e coleta ANEEL.",
+        "data": {
+          "concessionaria": "Concessionaria",
+          "dia_leitura_reset_mensal": "Dia de leitura/reset mensal",
+          "frequencia_atualizacao_horas": "Frequencia de atualizacao (horas)",
+          "meio_prioritario_aneel": "Meio prioritario de acesso ANEEL",
+          "entidade_consumo_kwh": "Entidade de consumo acumulado (kWh)",
+          "entidade_geracao_kwh": "Entidade de geracao acumulada (kWh)",
+          "tipo_fornecimento": "Tipo de fornecimento",
+          "quebras_calculo": "Quebras de calculo"
+        }
+      }
+    },
+    "error": {
+      "supply_type_required": "Informe tipo de fornecimento quando houver entidade de geracao."
+    },
+    "abort": {
+      "already_configured": "Esta concessionaria ja esta configurada."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Ajustes da integracao",
+        "description": "Atualize concessionaria, entidades, frequencia e quebras."
+      }
+    },
+    "error": {
+      "supply_type_required": "Informe tipo de fornecimento quando houver entidade de geracao."
+    }
+  },
+  "selector": {
+    "quebras_calculo": {
+      "options": {
+        "daily": "Diario",
+        "weekly": "Semanal",
+        "monthly": "Mensal"
+      }
+    }
+  }
+}
