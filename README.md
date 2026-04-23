@@ -2,7 +2,7 @@
 
 Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de concessionarias e calcula estimativas de custo de energia no Brasil (convencional, tarifa branca e cenarios com geracao/SCEE).
 
-Icone de brand (versao inicial): [assets/icon.svg](./assets/icon.svg)
+Icone de brand: [assets/icon.png](./assets/icon.png)
 
 ## Status
 
