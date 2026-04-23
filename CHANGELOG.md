@@ -31,6 +31,10 @@
 - Extratores internos adicionais (mantidos fora do fluxo de suporte):
   - `RGE SUL` (parcial)
   - `CEMIG-D` (parcial)
+- Regra de ICMS por faixa de consumo mensal:
+  - novo modulo `icms_rules.py`;
+  - aplicacao automatica no `coordinator` com fallback para aliquota base;
+  - cobertura de testes em `tests/test_icms_rules.py`.
 - Workflows CI:
   - `hacs.yaml`
   - `hassfest.yaml`

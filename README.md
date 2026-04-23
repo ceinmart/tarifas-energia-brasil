@@ -167,6 +167,7 @@ Tabela resumida de entidades:
    - `tarifa_branca_final_posto = aplicar_tributos_por_dentro(...)`
 4. Tributos por dentro:
    - `valor_com_tributos = valor_sem_tributos / (1 - pis - cofins - icms)`
+   - o `ICMS` aplicado pode ser ajustado por faixa de consumo mensal para concessionarias com regra mapeada
 5. Bandeira:
    - `valor_bandeira = kwh_faturado * adicional_bandeira_r_kwh`
 6. Disponibilidade:
@@ -184,6 +185,10 @@ Limitacoes atuais da pre-release:
 - Sem consumo por posto horario real, a conta de tarifa branca por periodo e estimativa.
 - Motor de creditos SCEE esta em modo operacional inicial (incremental) e deve evoluir com validacao em faturas reais.
 - Extratores web podem exigir ajuste quando houver mudanca de layout das concessionarias.
+
+Regra adicional implementada:
+
+- Aplicacao de ICMS por faixa de consumo mensal (quando regra da concessionaria esta mapeada), com fallback para aliquota base do extrator.
 
 ## Fixtures e testes de extratores
 

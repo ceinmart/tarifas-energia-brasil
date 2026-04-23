@@ -57,6 +57,7 @@ from .credito_ledger import (
     serialize_entries,
     total_credits_kwh,
 )
+from .icms_rules import resolve_icms_percent
 from .models import CollectionMetadata, SnapshotCalculo
 from .tributos import extract_tributos
 
@@ -281,45 +282,6 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         bandeira_data, bandeira_meta = bandeira_result
         tributos_data, tributos_meta = tributos_result
 
-        tarifa_conv_bruta, tarifa_conv_final = calcular_tarifa_convencional(
-            te_convencional_r_kwh=tarifas_data["convencional"]["te_r_kwh"],
-            tusd_convencional_r_kwh=tarifas_data["convencional"]["tusd_r_kwh"],
-            pis_percent=tributos_data.pis_percent,
-            cofins_percent=tributos_data.cofins_percent,
-            icms_percent=tributos_data.icms_percent,
-        )
-
-        tarifa_branca = calcular_tarifa_branca_por_posto(
-            te_por_posto_r_kwh={
-                "fora_ponta": tarifas_data["branca"]["fora_ponta"]["te_r_kwh"],
-                "intermediario": tarifas_data["branca"]["intermediario"]["te_r_kwh"],
-                "ponta": tarifas_data["branca"]["ponta"]["te_r_kwh"],
-            },
-            tusd_por_posto_r_kwh={
-                "fora_ponta": tarifas_data["branca"]["fora_ponta"]["tusd_r_kwh"],
-                "intermediario": tarifas_data["branca"]["intermediario"]["tusd_r_kwh"],
-                "ponta": tarifas_data["branca"]["ponta"]["tusd_r_kwh"],
-            },
-            pis_percent=tributos_data.pis_percent,
-            cofins_percent=tributos_data.cofins_percent,
-            icms_percent=tributos_data.icms_percent,
-        )
-
-        fio_b_bruto = fio_b_data["convencional_bruto_r_kwh"]
-        fio_b_final = calcular_fio_b_final(
-            fio_b_bruto_r_kwh=fio_b_bruto,
-            ano=referencia.year,
-            pis_percent=tributos_data.pis_percent,
-            cofins_percent=tributos_data.cofins_percent,
-            icms_percent=tributos_data.icms_percent,
-        )
-
-        disponibilidade_kwh = disponibilidade_minima_kwh(tipo_fornecimento)
-        valor_disponibilidade = calcular_valor_disponibilidade(
-            tipo_fornecimento=tipo_fornecimento,
-            tarifa_convencional_final_r_kwh=tarifa_conv_final,
-        )
-
         consumo_total_kwh = self._read_entity_kwh(consumo_entity)
         geracao_total_kwh = self._read_entity_kwh(geracao_entity)
 
@@ -337,6 +299,52 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             reading_day=int(self._effective_value(CONF_READING_DAY, DEFAULT_READING_DAY)),
             now=now,
             last_total_attr="_last_geracao_total_kwh",
+        )
+
+        consumo_mensal_kwh = consumo_periodos[BREAKDOWN_MONTHLY]
+        icms_aplicado_percent, icms_source = resolve_icms_percent(
+            concessionaria=concessionaria,
+            consumo_mensal_kwh=consumo_mensal_kwh,
+            fallback_icms_percent=tributos_data.icms_percent,
+        )
+
+        tarifa_conv_bruta, tarifa_conv_final = calcular_tarifa_convencional(
+            te_convencional_r_kwh=tarifas_data["convencional"]["te_r_kwh"],
+            tusd_convencional_r_kwh=tarifas_data["convencional"]["tusd_r_kwh"],
+            pis_percent=tributos_data.pis_percent,
+            cofins_percent=tributos_data.cofins_percent,
+            icms_percent=icms_aplicado_percent,
+        )
+
+        tarifa_branca = calcular_tarifa_branca_por_posto(
+            te_por_posto_r_kwh={
+                "fora_ponta": tarifas_data["branca"]["fora_ponta"]["te_r_kwh"],
+                "intermediario": tarifas_data["branca"]["intermediario"]["te_r_kwh"],
+                "ponta": tarifas_data["branca"]["ponta"]["te_r_kwh"],
+            },
+            tusd_por_posto_r_kwh={
+                "fora_ponta": tarifas_data["branca"]["fora_ponta"]["tusd_r_kwh"],
+                "intermediario": tarifas_data["branca"]["intermediario"]["tusd_r_kwh"],
+                "ponta": tarifas_data["branca"]["ponta"]["tusd_r_kwh"],
+            },
+            pis_percent=tributos_data.pis_percent,
+            cofins_percent=tributos_data.cofins_percent,
+            icms_percent=icms_aplicado_percent,
+        )
+
+        fio_b_bruto = fio_b_data["convencional_bruto_r_kwh"]
+        fio_b_final = calcular_fio_b_final(
+            fio_b_bruto_r_kwh=fio_b_bruto,
+            ano=referencia.year,
+            pis_percent=tributos_data.pis_percent,
+            cofins_percent=tributos_data.cofins_percent,
+            icms_percent=icms_aplicado_percent,
+        )
+
+        disponibilidade_kwh = disponibilidade_minima_kwh(tipo_fornecimento)
+        valor_disponibilidade = calcular_valor_disponibilidade(
+            tipo_fornecimento=tipo_fornecimento,
+            tarifa_convencional_final_r_kwh=tarifa_conv_final,
         )
 
         ciclo_mensal_atual = self._period_key(
@@ -404,7 +412,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             "fio_b_final_r_kwh": fio_b_final,
             "pis_percent": tributos_data.pis_percent,
             "cofins_percent": tributos_data.cofins_percent,
-            "icms_percent": tributos_data.icms_percent,
+            "icms_percent": icms_aplicado_percent,
             "bandeira_vigente": bandeira_data["bandeira"],
             "adicional_bandeira_r_kwh": bandeira_data["adicional_r_kwh"],
             "indicador_taxa_minima": consumo_periodos[BREAKDOWN_MONTHLY] < disponibilidade_kwh,
@@ -475,6 +483,9 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             "estimativa_tarifa_branca_sem_posto_real": True,
             "competencia_bandeira": bandeira_data["competencia"],
             "tributos_competencia": tributos_data.competencia,
+            "icms_percent_base_fonte": tributos_data.icms_percent,
+            "icms_percent_aplicado": icms_aplicado_percent,
+            "icms_source": icms_source,
             "saldo_creditos_disponiveis_kwh": saldo_creditos_disponiveis,
             "credito_consumido_estimado_atual_kwh": self._credito_consumido_estimado_atual_kwh,
             "credito_gerado_estimado_atual_kwh": self._credito_estimado_atual_kwh,

@@ -8,6 +8,9 @@
 
 - Bruta: `TE + TUSD`
 - Final: `bruta / (1 - pis - cofins - icms)`
+- ICMS aplicado:
+  - usa regra por faixa mensal para concessionarias mapeadas;
+  - em ausencia de regra, usa aliquota base extraida da fonte da concessionaria.
 
 ## Tarifa branca
 
