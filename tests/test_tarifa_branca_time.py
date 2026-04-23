@@ -9,10 +9,30 @@ from __future__ import annotations
 import importlib.util
 import sys
 import types
+from enum import StrEnum
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
+
+
+def _install_fake_homeassistant_modules() -> None:
+    """Instala stubs minimos para importar const.py sem Home Assistant real."""
+
+    homeassistant = sys.modules.get("homeassistant", types.ModuleType("homeassistant"))
+    const = sys.modules.get("homeassistant.const", types.ModuleType("homeassistant.const"))
+
+    class Platform(StrEnum):
+        SENSOR = "sensor"
+
+    const.Platform = Platform
+    homeassistant.const = const
+
+    sys.modules["homeassistant"] = homeassistant
+    sys.modules["homeassistant.const"] = const
+
+
+_install_fake_homeassistant_modules()
 
 
 def _load_package_module(module_name: str, file_path: Path):

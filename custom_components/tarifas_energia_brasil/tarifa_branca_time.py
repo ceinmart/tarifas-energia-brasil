@@ -124,6 +124,25 @@ def _time_to_minutes(value: time) -> int:
     return value.hour * 60 + value.minute
 
 
+def _resolve_reference_timezone(instant: datetime):
+    """Retorna o fuso de referencia do proprio instante, sem depender da maquina."""
+
+    if instant.tzinfo is not None:
+        return instant.tzinfo
+    return instant.astimezone().tzinfo
+
+
+def _as_reference_local(instant: datetime) -> datetime:
+    """Normaliza instante para o fuso de referencia dele mesmo."""
+
+    tzinfo = _resolve_reference_timezone(instant)
+    if tzinfo is None:
+        return instant
+    if instant.tzinfo is None:
+        return instant.astimezone(tzinfo)
+    return instant.astimezone(tzinfo)
+
+
 def _is_half_open(minute_of_day: int, start: time, end: time) -> bool:
     return _time_to_minutes(start) <= minute_of_day < _time_to_minutes(end)
 
@@ -255,7 +274,7 @@ def resolve_tarifa_branca_posto(
 ) -> str:
     """Classifica o instante em `fora_ponta`, `intermediario` ou `ponta`."""
 
-    local = instant.astimezone()
+    local = _as_reference_local(instant)
     day = local.date()
     if local.weekday() >= 5 or day in holidays:
         return POSTO_FORA_PONTA
@@ -285,12 +304,12 @@ def split_interval_by_midnight(
     if end <= start:
         return []
 
-    tzinfo = start.astimezone().tzinfo
+    tzinfo = _resolve_reference_timezone(start)
     cursor = start
     segments: list[tuple[datetime, datetime]] = []
 
     while cursor < end:
-        local = cursor.astimezone(tzinfo)
+        local = _as_reference_local(cursor)
         next_midnight = datetime.combine(
             local.date() + timedelta(days=1),
             time.min,
@@ -313,12 +332,12 @@ def split_interval_by_tarifa_branca(
     if end <= start:
         return []
 
-    tzinfo = start.astimezone().tzinfo
+    tzinfo = _resolve_reference_timezone(start)
     cursor = start
     segments: list[tuple[datetime, datetime, str]] = []
 
     while cursor < end:
-        local = cursor.astimezone(tzinfo)
+        local = _as_reference_local(cursor)
         day = local.date()
         candidates = [
             datetime.combine(day + timedelta(days=1), time.min, tzinfo=tzinfo)
