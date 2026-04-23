@@ -36,6 +36,9 @@ def _install_fake_homeassistant_modules() -> None:
         DROPDOWN = "dropdown"
         LIST = "list"
 
+    class NumberSelectorMode(StrEnum):
+        BOX = "box"
+
     @dataclass
     class SelectSelectorConfig:
         options: list[str]
@@ -47,8 +50,22 @@ def _install_fake_homeassistant_modules() -> None:
         domain: list[str] | None = None
         device_class: list[str] | None = None
 
+    @dataclass
+    class NumberSelectorConfig:
+        min: float | None = None
+        max: float | None = None
+        step: float | None = None
+        mode: NumberSelectorMode | None = None
+
     class SelectSelector:
         def __init__(self, config: SelectSelectorConfig) -> None:
+            self.config = config
+
+        def __call__(self, value):  # noqa: ANN001
+            return value
+
+    class NumberSelector:
+        def __init__(self, config: NumberSelectorConfig) -> None:
             self.config = config
 
         def __call__(self, value):  # noqa: ANN001
@@ -62,9 +79,12 @@ def _install_fake_homeassistant_modules() -> None:
             return value
 
     selector.SelectSelectorMode = SelectSelectorMode
+    selector.NumberSelectorMode = NumberSelectorMode
     selector.SelectSelectorConfig = SelectSelectorConfig
     selector.EntitySelectorConfig = EntitySelectorConfig
+    selector.NumberSelectorConfig = NumberSelectorConfig
     selector.SelectSelector = SelectSelector
+    selector.NumberSelector = NumberSelector
     selector.EntitySelector = EntitySelector
 
     class ConfigFlow:
@@ -168,7 +188,9 @@ CONF_CONSUMPTION_ENTITY = const_module.CONF_CONSUMPTION_ENTITY
 CONF_ENABLE_GENERATION_GROUP = const_module.CONF_ENABLE_GENERATION_GROUP
 CONF_ENABLE_TARIFA_BRANCA_GROUP = const_module.CONF_ENABLE_TARIFA_BRANCA_GROUP
 CONF_GENERATION_ENTITY = const_module.CONF_GENERATION_ENTITY
+CONF_READING_DAY = const_module.CONF_READING_DAY
 CONF_SUPPLY_TYPE = const_module.CONF_SUPPLY_TYPE
+CONF_UPDATE_HOURS = const_module.CONF_UPDATE_HOURS
 
 
 def test_config_flow_show_form_initial():
@@ -266,3 +288,19 @@ def test_options_flow_injects_legacy_defaults():
     defaults = flow._current_defaults(None)
     assert defaults[CONF_ENABLE_GENERATION_GROUP] is True
     assert defaults[CONF_ENABLE_TARIFA_BRANCA_GROUP] is True
+
+
+def test_config_flow_uses_number_box_for_reading_day_and_update_hours():
+    schema = TarifasEnergiaBrasilConfigFlow._build_schema()
+    fields = {
+        marker.schema: field
+        for marker, field in schema.schema.items()
+    }
+    selector_module = sys.modules["homeassistant.helpers.selector"]
+    number_selector = selector_module.NumberSelector
+    number_mode = selector_module.NumberSelectorMode
+
+    assert isinstance(fields[CONF_READING_DAY], number_selector)
+    assert fields[CONF_READING_DAY].config.mode == number_mode.BOX
+    assert isinstance(fields[CONF_UPDATE_HOURS], number_selector)
+    assert fields[CONF_UPDATE_HOURS].config.mode == number_mode.BOX

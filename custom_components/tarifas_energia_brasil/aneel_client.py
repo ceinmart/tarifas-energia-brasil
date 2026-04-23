@@ -321,8 +321,24 @@ class AneelClient:
                 "intermediario": {"te_r_kwh": 0.0, "tusd_r_kwh": 0.0},
                 "ponta": {"te_r_kwh": 0.0, "tusd_r_kwh": 0.0},
             },
+            "selection_debug": {
+                "convencional": None,
+                "branca": {
+                    "fora_ponta": None,
+                    "intermediario": None,
+                    "ponta": None,
+                },
+            },
             "vigencia_inicio": None,
             "vigencia_fim": None,
+        }
+        selected_ranks: dict[str, Any] = {
+            "convencional": None,
+            "branca": {
+                "fora_ponta": None,
+                "intermediario": None,
+                "ponta": None,
+            },
         }
 
         for row in records:
@@ -332,28 +348,51 @@ class AneelClient:
             modalidade = _normalize(self._pick(row, "DscModalidadeTarifaria"))
             posto = self._resolve_posto_key(self._pick(row, "NomPostoTarifario"))
             te_r_kwh, tusd_r_kwh = self._extract_te_tusd_r_kwh(row)
+            if te_r_kwh <= 0 and tusd_r_kwh <= 0:
+                continue
+            rank = self._tarifa_selection_rank(row)
 
             if "convencional" in modalidade and "pre" not in modalidade:
-                if te_r_kwh > 0:
-                    result["convencional"]["te_r_kwh"] = te_r_kwh
-                if tusd_r_kwh > 0:
-                    result["convencional"]["tusd_r_kwh"] = tusd_r_kwh
+                if self._rank_is_better(rank, selected_ranks["convencional"]):
+                    result["convencional"] = {
+                        "te_r_kwh": te_r_kwh,
+                        "tusd_r_kwh": tusd_r_kwh,
+                    }
+                    selected_ranks["convencional"] = rank
+                    result["selection_debug"]["convencional"] = self._build_row_debug(
+                        row,
+                        score=rank,
+                        te_r_kwh=te_r_kwh,
+                        tusd_r_kwh=tusd_r_kwh,
+                    )
+                    result["vigencia_inicio"] = self._string_or_none(
+                        self._pick(row, "DatInicioVigencia")
+                    )
+                    result["vigencia_fim"] = self._string_or_none(
+                        self._pick(row, "DatFimVigencia")
+                    )
             elif "branca" in modalidade:
-                target = result["branca"].setdefault(
-                    posto,
-                    {"te_r_kwh": 0.0, "tusd_r_kwh": 0.0},
-                )
-                if te_r_kwh > 0:
-                    target["te_r_kwh"] = te_r_kwh
-                if tusd_r_kwh > 0:
-                    target["tusd_r_kwh"] = tusd_r_kwh
-
-            start = self._pick(row, "DatInicioVigencia")
-            end = self._pick(row, "DatFimVigencia")
-            if start and not result["vigencia_inicio"]:
-                result["vigencia_inicio"] = str(start)
-            if end and not result["vigencia_fim"]:
-                result["vigencia_fim"] = str(end)
+                current_rank = selected_ranks["branca"][posto]
+                if self._rank_is_better(rank, current_rank):
+                    result["branca"][posto] = {
+                        "te_r_kwh": te_r_kwh,
+                        "tusd_r_kwh": tusd_r_kwh,
+                    }
+                    selected_ranks["branca"][posto] = rank
+                    result["selection_debug"]["branca"][posto] = self._build_row_debug(
+                        row,
+                        score=rank,
+                        te_r_kwh=te_r_kwh,
+                        tusd_r_kwh=tusd_r_kwh,
+                    )
+                    if not result["vigencia_inicio"]:
+                        result["vigencia_inicio"] = self._string_or_none(
+                            self._pick(row, "DatInicioVigencia")
+                        )
+                    if not result["vigencia_fim"]:
+                        result["vigencia_fim"] = self._string_or_none(
+                            self._pick(row, "DatFimVigencia")
+                        )
 
         return result
 
@@ -372,8 +411,24 @@ class AneelClient:
                 "intermediario": 0.0,
                 "ponta": 0.0,
             },
+            "selection_debug": {
+                "convencional": None,
+                "branca": {
+                    "fora_ponta": None,
+                    "intermediario": None,
+                    "ponta": None,
+                },
+            },
             "vigencia_inicio": None,
             "vigencia_fim": None,
+        }
+        selected_ranks: dict[str, Any] = {
+            "convencional": None,
+            "branca": {
+                "fora_ponta": None,
+                "intermediario": None,
+                "ponta": None,
+            },
         }
 
         valid_rows = [
@@ -393,17 +448,111 @@ class AneelClient:
             if raw <= 0:
                 continue
             value_r_kwh = _to_r_kwh(raw)
+            rank = self._fio_b_selection_rank(row)
 
             if "convencional" in modalidade and "pre" not in modalidade:
-                if result["convencional_bruto_r_kwh"] <= 0:
+                if self._rank_is_better(rank, selected_ranks["convencional"]):
                     result["convencional_bruto_r_kwh"] = value_r_kwh
-                    result["vigencia_inicio"] = self._pick(row, "DatInicioVigencia")
-                    result["vigencia_fim"] = self._pick(row, "DatFimVigencia")
+                    result["selection_debug"]["convencional"] = self._build_row_debug(
+                        row,
+                        score=rank,
+                        value_r_kwh=value_r_kwh,
+                    )
+                    selected_ranks["convencional"] = rank
+                    result["vigencia_inicio"] = self._string_or_none(
+                        self._pick(row, "DatInicioVigencia")
+                    )
+                    result["vigencia_fim"] = self._string_or_none(
+                        self._pick(row, "DatFimVigencia")
+                    )
             elif "branca" in modalidade:
-                if result["branca_bruto_r_kwh_por_posto"][posto] <= 0:
+                current_rank = selected_ranks["branca"][posto]
+                if self._rank_is_better(rank, current_rank):
                     result["branca_bruto_r_kwh_por_posto"][posto] = value_r_kwh
+                    result["selection_debug"]["branca"][posto] = self._build_row_debug(
+                        row,
+                        score=rank,
+                        value_r_kwh=value_r_kwh,
+                    )
+                    selected_ranks["branca"][posto] = rank
 
         return result
+
+    def _tarifa_selection_rank(self, row: dict[str, Any]) -> tuple[int, ...]:
+        """Prioriza linha residencial padrao e evita SCEE/social por padrao."""
+
+        subclasse = _normalize(self._pick(row, "DscSubClasse"))
+        detalhe = _normalize(self._pick(row, "DscDetalhe"))
+        return (
+            1 if not self._is_social_subclass(subclasse) else 0,
+            1 if subclasse == "residencial" else 0,
+            1 if detalhe in ("nao se aplica", "") else 0,
+            1 if "tarifa de aplicacao" in _normalize(self._pick(row, "DscBaseTarifaria")) else 0,
+        )
+
+    def _fio_b_selection_rank(self, row: dict[str, Any]) -> tuple[int, ...]:
+        """Prioriza Fio B residencial B1 de aplicacao e sem detalhe especial."""
+
+        subgrupo = _normalize(
+            self._pick_first(row, "DscSubGrupoTarifario", "DscSubGrupo")
+        )
+        classe = _normalize(
+            self._pick_first(row, "DscClasseConsumidor", "DscClasse")
+        )
+        subclasse = _normalize(
+            self._pick_first(row, "DscSubClasseConsumidor", "DscSubClasse")
+        )
+        detalhe = _normalize(
+            self._pick_first(row, "DscDetalheConsumidor", "DscDetalhe")
+        )
+        base = _normalize(self._pick(row, "DscBaseTarifaria"))
+        return (
+            1 if subgrupo == "b1" else 0,
+            1 if classe == "residencial" else 0,
+            1 if not self._is_social_subclass(subclasse) else 0,
+            1 if subclasse == "residencial" else 0,
+            1 if detalhe in ("nao se aplica", "") else 0,
+            1 if "tarifa de aplicacao" in base else 0,
+        )
+
+    def _build_row_debug(
+        self,
+        row: dict[str, Any],
+        *,
+        score: tuple[int, ...],
+        te_r_kwh: float | None = None,
+        tusd_r_kwh: float | None = None,
+        value_r_kwh: float | None = None,
+    ) -> dict[str, Any]:
+        """Resume a linha escolhida para apoiar diagnostico."""
+
+        return {
+            "score": list(score),
+            "vigencia_inicio": self._string_or_none(self._pick(row, "DatInicioVigencia")),
+            "vigencia_fim": self._string_or_none(self._pick(row, "DatFimVigencia")),
+            "modalidade": self._string_or_none(
+                self._pick_first(row, "DscModalidadeTarifaria")
+            ),
+            "posto": self._string_or_none(
+                self._pick_first(row, "NomPostoTarifario", "DscPostoTarifario")
+            ),
+            "base_tarifaria": self._string_or_none(self._pick(row, "DscBaseTarifaria")),
+            "subgrupo": self._string_or_none(
+                self._pick_first(row, "DscSubGrupo", "DscSubGrupoTarifario")
+            ),
+            "classe": self._string_or_none(
+                self._pick_first(row, "DscClasse", "DscClasseConsumidor")
+            ),
+            "subclasse": self._string_or_none(
+                self._pick_first(row, "DscSubClasse", "DscSubClasseConsumidor")
+            ),
+            "detalhe": self._string_or_none(
+                self._pick_first(row, "DscDetalhe", "DscDetalheConsumidor")
+            ),
+            "te_r_kwh": te_r_kwh,
+            "tusd_r_kwh": tusd_r_kwh,
+            "value_r_kwh": value_r_kwh,
+        }
 
     def _pick_latest_bandeira(
         self,
@@ -584,6 +733,42 @@ class AneelClient:
             if str(row_key).lower() == key_lower:
                 return row_value
         return None
+
+    def _pick_first(self, row: dict[str, Any], *keys: str) -> Any:
+        """Retorna o primeiro campo disponivel entre chaves alternativas."""
+
+        for key in keys:
+            value = self._pick(row, key)
+            if value is not None:
+                return value
+        return None
+
+    @staticmethod
+    def _rank_is_better(
+        candidate_rank: tuple[int, ...],
+        current_rank: tuple[int, ...] | None,
+    ) -> bool:
+        """Compara ranks lexicograficos com fallback para ausencia."""
+
+        return current_rank is None or candidate_rank > current_rank
+
+    @staticmethod
+    def _is_social_subclass(subclasse: str) -> bool:
+        """Identifica subclasses sociais/baixa renda que nao sao o alvo padrao."""
+
+        return any(
+            keyword in subclasse
+            for keyword in ("baixa renda", "tarifa social", "desconto social")
+        )
+
+    @staticmethod
+    def _string_or_none(value: Any) -> str | None:
+        """Normaliza valores opcionais para string simples."""
+
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
 
     @staticmethod
     def _row_matches_filters(row: dict[str, Any], filters: dict[str, Any] | None) -> bool:

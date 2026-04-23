@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.2 - 2026-04-23
+
 ### Alterado
 
 - Mantido um unico device principal da integracao, com organizacao por grupos logicos no mesmo device.
@@ -16,6 +18,10 @@
 - O `options_flow` passou a permitir override manual das janelas horarias da Tarifa Branca.
 - Consumo e geracao acumulados passaram a respeitar rateio temporal em viradas de dia, semana e ciclo mensal.
 - Fechamento do ciclo mensal de creditos SCEE foi reforcado para usar os acumuladores correntes do periodo antes da troca de ciclo.
+- Campos `Dia de leitura` e `Frequencia de atualizacao` passaram a usar caixa de entrada numerica no fluxo de configuracao.
+- A selecao de linhas ANEEL passou a priorizar o recorte residencial correto para `TE`, `TUSD` e `Fio B`, evitando linhas de `SCEE`, `Tarifa Social`, `Baixa Renda` e variantes equivalentes quando existir a linha residencial padrao.
+- O bootstrap inicial do ICMS passou a usar fallback seguro sem forcar faixa isenta quando ainda nao houver historico de consumo mensal acumulado.
+- Diagnosticos da integracao agora expõem a linha escolhida da ANEEL para tarifas e `Fio B`, alem da origem aplicada do ICMS.
 
 ### Testes
 
@@ -25,6 +31,8 @@
   - estabilidade de `unique_id` e `device_info` no modelo de um unico device.
   - horarios, feriados e rateio temporal da Tarifa Branca;
   - calculo monetario da Tarifa Branca por posto.
+  - selecao correta das linhas da ANEEL para `CPFL-PIRATINING`;
+  - uso de `NumberSelector` em modo caixa para os campos numericos do `config_flow`.
 
 ## 0.1.0-alpha.1-base-integracao - 2026-04-22
 

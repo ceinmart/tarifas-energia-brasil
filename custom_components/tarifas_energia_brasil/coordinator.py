@@ -882,6 +882,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         consumo_entity = self._effective_value(CONF_CONSUMPTION_ENTITY)
         geracao_entity = self._effective_value(CONF_GENERATION_ENTITY)
         tipo_fornecimento = self._effective_value(CONF_SUPPLY_TYPE, SUPPLY_MONOPHASE)
+        had_consumo_history = self._last_consumo_timestamp is not None
 
         try:
             tarifas_task = self._aneel_client.fetch_tarifas(
@@ -954,11 +955,15 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         )
 
         consumo_mensal_kwh = consumo_periodos[BREAKDOWN_MONTHLY]
-        icms_aplicado_percent, icms_source = resolve_icms_percent(
-            concessionaria=concessionaria,
-            consumo_mensal_kwh=consumo_mensal_kwh,
-            fallback_icms_percent=tributos_data.icms_percent,
-        )
+        if had_consumo_history or consumo_mensal_kwh > 0:
+            icms_aplicado_percent, icms_source = resolve_icms_percent(
+                concessionaria=concessionaria,
+                consumo_mensal_kwh=consumo_mensal_kwh,
+                fallback_icms_percent=tributos_data.icms_percent,
+            )
+        else:
+            icms_aplicado_percent = tributos_data.icms_percent
+            icms_source = "fallback_bootstrap_sem_historico"
 
         tarifa_conv_bruta, tarifa_conv_final = calcular_tarifa_convencional(
             te_convencional_r_kwh=tarifas_data["convencional"]["te_r_kwh"],
@@ -1075,6 +1080,8 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             "prioridade_aneel": prioridade,
             "consumo_entity": consumo_entity,
             "geracao_entity": geracao_entity,
+            "consumo_mensal_kwh_apurado": consumo_mensal_kwh,
+            "consumo_bootstrap_sem_historico": not had_consumo_history,
             "mensagem_erro": None,
             "estimativa_tarifa_branca_sem_posto_real": False,
             "competencia_bandeira": bandeira_data["competencia"],
@@ -1082,6 +1089,8 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             "icms_percent_base_fonte": tributos_data.icms_percent,
             "icms_percent_aplicado": icms_aplicado_percent,
             "icms_source": icms_source,
+            "tarifas_selection_debug": tarifas_data.get("selection_debug"),
+            "fio_b_selection_debug": fio_b_data.get("selection_debug"),
             "saldo_creditos_disponiveis_kwh": saldo_creditos_disponiveis,
             "credito_consumido_estimado_atual_kwh": self._credito_consumido_estimado_atual_kwh,
             "credito_gerado_estimado_atual_kwh": self._credito_estimado_atual_kwh,

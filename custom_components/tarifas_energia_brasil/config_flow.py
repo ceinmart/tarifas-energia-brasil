@@ -94,11 +94,25 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(
                 CONF_READING_DAY,
                 default=int(defaults.get(CONF_READING_DAY, DEFAULT_READING_DAY)),
-            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=31)),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=1,
+                    max=31,
+                    step=1,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            ),
             vol.Required(
                 CONF_UPDATE_HOURS,
                 default=int(defaults.get(CONF_UPDATE_HOURS, DEFAULT_UPDATE_HOURS)),
-            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=168)),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=1,
+                    max=168,
+                    step=1,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            ),
             vol.Required(
                 CONF_ANEEL_METHOD,
                 default=defaults.get(CONF_ANEEL_METHOD, DEFAULT_ANEEL_METHOD),
