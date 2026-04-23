@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Alterado
+
+- Mantido um unico device principal da integracao, com organizacao por grupos logicos no mesmo device.
+- Adicionados toggles no `options_flow` para controlar publicacao dos grupos:
+  - `Geracao/SCEE`
+  - `Tarifa Branca`
+- Novas instalacoes passam a iniciar com `Tarifa Branca` desabilitada por default para reduzir ruido visual.
+- Entries antigas preservam o grupo `Tarifa Branca` visivel por compatibilidade ate o usuario optar por ocultar.
+- Sensores tecnicos de apoio passaram a usar categoria `diagnostic` quando apropriado.
+
+### Testes
+
+- Cobertura adicionada para:
+  - defaults e normalizacao dos grupos no `config_flow/options_flow`;
+  - criacao condicional de sensores por grupo;
+  - estabilidade de `unique_id` e `device_info` no modelo de um unico device.
+
 ## 0.1.0-alpha.1-base-integracao - 2026-04-22
 
 ### Adicionado

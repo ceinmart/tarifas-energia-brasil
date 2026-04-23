@@ -19,6 +19,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
@@ -29,9 +30,13 @@ from .const import (
     BREAKDOWN_WEEKLY,
     CONF_BREAKDOWNS,
     CONF_CONCESSIONARIA,
-    CONF_GENERATION_ENTITY,
     DEFAULT_BREAKDOWNS,
     DOMAIN,
+    ENTITY_GROUP_GENERATION,
+    ENTITY_GROUP_REGULAR,
+    ENTITY_GROUP_TARIFA_BRANCA,
+    is_generation_group_enabled,
+    is_tarifa_branca_group_enabled,
 )
 from .coordinator import TarifasEnergiaBrasilCoordinator
 
@@ -45,6 +50,7 @@ class TarifaSensorDescription(SensorEntityDescription):
     """Descricao de sensor baseado em chave do snapshot."""
 
     value_key: str
+    group: str = ENTITY_GROUP_REGULAR
 
 
 BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
@@ -54,6 +60,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="TE convencional",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="tusd_convencional_r_kwh",
@@ -61,6 +68,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="TUSD convencional",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="tarifa_convencional_bruta_r_kwh",
@@ -68,6 +76,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="Tarifa convencional bruta",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="tarifa_convencional_final_r_kwh",
@@ -82,6 +91,8 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="TE branca fora ponta",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_TARIFA_BRANCA,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="tusd_branca_fora_ponta_r_kwh",
@@ -89,6 +100,8 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="TUSD branca fora ponta",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_TARIFA_BRANCA,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="tarifa_branca_fora_ponta_bruta_r_kwh",
@@ -96,6 +109,8 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="Tarifa branca fora ponta bruta",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_TARIFA_BRANCA,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="tarifa_branca_fora_ponta_final_r_kwh",
@@ -103,6 +118,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="Tarifa branca fora ponta final",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_TARIFA_BRANCA,
     ),
     TarifaSensorDescription(
         key="te_branca_intermediario_r_kwh",
@@ -110,6 +126,8 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="TE branca intermediario",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_TARIFA_BRANCA,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="tusd_branca_intermediario_r_kwh",
@@ -117,6 +135,8 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="TUSD branca intermediario",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_TARIFA_BRANCA,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="tarifa_branca_intermediario_bruta_r_kwh",
@@ -124,6 +144,8 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="Tarifa branca intermediario bruta",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_TARIFA_BRANCA,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="tarifa_branca_intermediario_final_r_kwh",
@@ -131,6 +153,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="Tarifa branca intermediario final",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_TARIFA_BRANCA,
     ),
     TarifaSensorDescription(
         key="te_branca_ponta_r_kwh",
@@ -138,6 +161,8 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="TE branca ponta",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_TARIFA_BRANCA,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="tusd_branca_ponta_r_kwh",
@@ -145,6 +170,8 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="TUSD branca ponta",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_TARIFA_BRANCA,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="tarifa_branca_ponta_bruta_r_kwh",
@@ -152,6 +179,8 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="Tarifa branca ponta bruta",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_TARIFA_BRANCA,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="tarifa_branca_ponta_final_r_kwh",
@@ -159,6 +188,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="Tarifa branca ponta final",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_TARIFA_BRANCA,
     ),
     TarifaSensorDescription(
         key="fio_b_bruto_r_kwh",
@@ -166,6 +196,8 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="Fio B bruto",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_GENERATION,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="fio_b_final_r_kwh",
@@ -173,6 +205,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="Fio B final",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_GENERATION,
     ),
     TarifaSensorDescription(
         key="pis_percent",
@@ -180,6 +213,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="PIS",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="cofins_percent",
@@ -187,6 +221,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="COFINS",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="icms_percent",
@@ -194,6 +229,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="ICMS",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="bandeira_vigente",
@@ -206,6 +242,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="Adicional da bandeira",
         native_unit_of_measurement=UNIT_R_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="indicador_taxa_minima",
@@ -218,6 +255,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="kWh adicionados para disponibilidade",
         native_unit_of_measurement=UNIT_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     TarifaSensorDescription(
         key="saldo_creditos_mes_anterior_kwh",
@@ -225,6 +263,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="Saldo de creditos do mes anterior",
         native_unit_of_measurement=UNIT_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_GENERATION,
     ),
     TarifaSensorDescription(
         key="previsao_creditos_gerados_kwh",
@@ -232,6 +271,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="Previsao de creditos gerados",
         native_unit_of_measurement=UNIT_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_GENERATION,
     ),
     TarifaSensorDescription(
         key="auto_consumo_kwh",
@@ -239,6 +279,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         name="Auto-consumo",
         native_unit_of_measurement=UNIT_KWH,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_GENERATION,
     ),
     TarifaSensorDescription(
         key="auto_consumo_reais",
@@ -247,6 +288,7 @@ BASE_SENSOR_DESCRIPTIONS: tuple[TarifaSensorDescription, ...] = (
         native_unit_of_measurement=UNIT_R,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
+        group=ENTITY_GROUP_GENERATION,
     ),
 )
 
@@ -259,62 +301,13 @@ async def async_setup_entry(
     """Cria entidades da plataforma sensor para a integracao."""
 
     coordinator: TarifasEnergiaBrasilCoordinator = hass.data[DOMAIN][entry.entry_id]
-    enabled_breakdowns = _entry_breakdowns(entry)
-    has_generation = bool(_entry_value(entry, CONF_GENERATION_ENTITY))
-
-    dynamic_descriptions: list[TarifaSensorDescription] = []
-    for period in enabled_breakdowns:
-        suffix = _period_suffix(period)
-        dynamic_descriptions.extend(
-            (
-                TarifaSensorDescription(
-                    key=f"valor_conta_consumo_regular_{period}_r",
-                    value_key=f"valor_conta_consumo_regular_{period}_r",
-                    name=f"Valor conta consumo regular {suffix}",
-                    native_unit_of_measurement=UNIT_R,
-                    device_class=SensorDeviceClass.MONETARY,
-                    state_class=SensorStateClass.MEASUREMENT,
-                ),
-                TarifaSensorDescription(
-                    key=f"valor_conta_tarifa_branca_{period}_r",
-                    value_key=f"valor_conta_tarifa_branca_{period}_r",
-                    name=f"Valor conta tarifa branca {suffix}",
-                    native_unit_of_measurement=UNIT_R,
-                    device_class=SensorDeviceClass.MONETARY,
-                    state_class=SensorStateClass.MEASUREMENT,
-                ),
-            )
-        )
-
-        if has_generation:
-            dynamic_descriptions.extend(
-                (
-                    TarifaSensorDescription(
-                        key=f"valor_conta_com_geracao_{period}_r",
-                        value_key=f"valor_conta_com_geracao_{period}_r",
-                        name=f"Valor conta com geracao {suffix}",
-                        native_unit_of_measurement=UNIT_R,
-                        device_class=SensorDeviceClass.MONETARY,
-                        state_class=SensorStateClass.MEASUREMENT,
-                    ),
-                    TarifaSensorDescription(
-                        key=f"valor_fio_b_compensada_{period}_r",
-                        value_key=f"valor_fio_b_compensada_{period}_r",
-                        name=f"Valor Fio B compensada {suffix}",
-                        native_unit_of_measurement=UNIT_R,
-                        device_class=SensorDeviceClass.MONETARY,
-                        state_class=SensorStateClass.MEASUREMENT,
-                    ),
-                )
-            )
-
     entities: list[TarifasEnergiaBrasilSensor] = [
         TarifasEnergiaBrasilSensor(
             coordinator=coordinator,
             entry=entry,
             description=description,
         )
-        for description in (*BASE_SENSOR_DESCRIPTIONS, *dynamic_descriptions)
+        for description in build_sensor_descriptions(entry)
     ]
     async_add_entities(entities)
 
@@ -347,6 +340,93 @@ def _period_suffix(period: str) -> str:
     if period == BREAKDOWN_WEEKLY:
         return "semanal"
     return "mensal"
+
+
+def _entry_effective_config(entry: ConfigEntry) -> dict[str, Any]:
+    """Combina data e options para resolver grupos e parametros."""
+
+    return {
+        **entry.data,
+        **entry.options,
+    }
+
+
+def _enabled_groups(entry: ConfigEntry) -> set[str]:
+    """Resolve quais grupos logicos devem publicar entidades."""
+
+    config = _entry_effective_config(entry)
+    enabled = {ENTITY_GROUP_REGULAR}
+    if is_generation_group_enabled(config):
+        enabled.add(ENTITY_GROUP_GENERATION)
+    if is_tarifa_branca_group_enabled(config):
+        enabled.add(ENTITY_GROUP_TARIFA_BRANCA)
+    return enabled
+
+
+def build_sensor_descriptions(entry: ConfigEntry) -> tuple[TarifaSensorDescription, ...]:
+    """Monta lista final de sensores respeitando grupos e quebras habilitadas."""
+
+    enabled_breakdowns = _entry_breakdowns(entry)
+    enabled_groups = _enabled_groups(entry)
+    dynamic_descriptions: list[TarifaSensorDescription] = []
+
+    for period in enabled_breakdowns:
+        suffix = _period_suffix(period)
+        dynamic_descriptions.append(
+            TarifaSensorDescription(
+                key=f"valor_conta_consumo_regular_{period}_r",
+                value_key=f"valor_conta_consumo_regular_{period}_r",
+                name=f"Valor conta consumo regular {suffix}",
+                native_unit_of_measurement=UNIT_R,
+                device_class=SensorDeviceClass.MONETARY,
+                state_class=SensorStateClass.MEASUREMENT,
+                group=ENTITY_GROUP_REGULAR,
+            )
+        )
+
+        if ENTITY_GROUP_TARIFA_BRANCA in enabled_groups:
+            dynamic_descriptions.append(
+                TarifaSensorDescription(
+                    key=f"valor_conta_tarifa_branca_{period}_r",
+                    value_key=f"valor_conta_tarifa_branca_{period}_r",
+                    name=f"Valor conta tarifa branca {suffix}",
+                    native_unit_of_measurement=UNIT_R,
+                    device_class=SensorDeviceClass.MONETARY,
+                    state_class=SensorStateClass.MEASUREMENT,
+                    group=ENTITY_GROUP_TARIFA_BRANCA,
+                )
+            )
+
+        if ENTITY_GROUP_GENERATION in enabled_groups:
+            dynamic_descriptions.extend(
+                (
+                    TarifaSensorDescription(
+                        key=f"valor_conta_com_geracao_{period}_r",
+                        value_key=f"valor_conta_com_geracao_{period}_r",
+                        name=f"Valor conta com geracao {suffix}",
+                        native_unit_of_measurement=UNIT_R,
+                        device_class=SensorDeviceClass.MONETARY,
+                        state_class=SensorStateClass.MEASUREMENT,
+                        group=ENTITY_GROUP_GENERATION,
+                    ),
+                    TarifaSensorDescription(
+                        key=f"valor_fio_b_compensada_{period}_r",
+                        value_key=f"valor_fio_b_compensada_{period}_r",
+                        name=f"Valor Fio B compensada {suffix}",
+                        native_unit_of_measurement=UNIT_R,
+                        device_class=SensorDeviceClass.MONETARY,
+                        state_class=SensorStateClass.MEASUREMENT,
+                        group=ENTITY_GROUP_GENERATION,
+                    ),
+                )
+            )
+
+    descriptions = [
+        description
+        for description in (*BASE_SENSOR_DESCRIPTIONS, *dynamic_descriptions)
+        if description.group in enabled_groups
+    ]
+    return tuple(descriptions)
 
 
 class TarifasEnergiaBrasilSensor(

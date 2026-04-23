@@ -25,6 +25,8 @@ CONF_CONSUMPTION_ENTITY = "entidade_consumo_kwh"
 CONF_GENERATION_ENTITY = "entidade_geracao_kwh"
 CONF_SUPPLY_TYPE = "tipo_fornecimento"
 CONF_BREAKDOWNS = "quebras_calculo"
+CONF_ENABLE_GENERATION_GROUP = "habilitar_grupo_geracao"
+CONF_ENABLE_TARIFA_BRANCA_GROUP = "habilitar_grupo_tarifa_branca"
 
 BREAKDOWN_DAILY = "daily"
 BREAKDOWN_WEEKLY = "weekly"
@@ -57,10 +59,16 @@ DEFAULT_READING_DAY = 1
 DEFAULT_UPDATE_HOURS = 24
 DEFAULT_ANEEL_METHOD = ANEEL_METHOD_DATASTORE_SEARCH
 DEFAULT_BREAKDOWNS: list[str] = [BREAKDOWN_DAILY, BREAKDOWN_MONTHLY]
+DEFAULT_ENABLE_GENERATION_GROUP = False
+DEFAULT_ENABLE_TARIFA_BRANCA_GROUP = False
 
 ATTR_CONFIANCA_ALTA = "alta"
 ATTR_CONFIANCA_MEDIA = "media"
 ATTR_CONFIANCA_BAIXA = "baixa"
+
+ENTITY_GROUP_REGULAR = "regular"
+ENTITY_GROUP_GENERATION = "geracao"
+ENTITY_GROUP_TARIFA_BRANCA = "tarifa_branca"
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,3 +150,41 @@ def get_aneel_method_fallback_order(priority_method: str) -> list[str]:
         priority_method = DEFAULT_ANEEL_METHOD
 
     return [priority_method, *[m for m in SUPPORTED_ANEEL_METHODS if m != priority_method]]
+
+
+def parse_bool(value: object, default: bool) -> bool:
+    """Converte valores comuns para bool de forma tolerante."""
+
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "sim", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "nao", "não", "no", "off"}:
+            return False
+    return default
+
+
+def is_generation_group_enabled(config: Mapping[str, object]) -> bool:
+    """Resolve se o grupo de geracao deve ficar habilitado."""
+
+    if CONF_ENABLE_GENERATION_GROUP in config:
+        return parse_bool(
+            config.get(CONF_ENABLE_GENERATION_GROUP),
+            DEFAULT_ENABLE_GENERATION_GROUP,
+        )
+    return bool(config.get(CONF_GENERATION_ENTITY))
+
+
+def is_tarifa_branca_group_enabled(config: Mapping[str, object]) -> bool:
+    """Resolve se o grupo de tarifa branca deve ficar habilitado."""
+
+    if CONF_ENABLE_TARIFA_BRANCA_GROUP in config:
+        return parse_bool(
+            config.get(CONF_ENABLE_TARIFA_BRANCA_GROUP),
+            DEFAULT_ENABLE_TARIFA_BRANCA_GROUP,
+        )
+    # Compatibilidade com entries antigas: manter comportamento atual ate o
+    # usuario optar explicitamente por esconder o grupo.
+    return True

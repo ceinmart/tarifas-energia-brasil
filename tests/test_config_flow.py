@@ -165,6 +165,8 @@ TarifasEnergiaBrasilConfigFlow = config_flow_module.TarifasEnergiaBrasilConfigFl
 TarifasEnergiaBrasilOptionsFlow = config_flow_module.TarifasEnergiaBrasilOptionsFlow
 CONF_CONCESSIONARIA = const_module.CONF_CONCESSIONARIA
 CONF_CONSUMPTION_ENTITY = const_module.CONF_CONSUMPTION_ENTITY
+CONF_ENABLE_GENERATION_GROUP = const_module.CONF_ENABLE_GENERATION_GROUP
+CONF_ENABLE_TARIFA_BRANCA_GROUP = const_module.CONF_ENABLE_TARIFA_BRANCA_GROUP
 CONF_GENERATION_ENTITY = const_module.CONF_GENERATION_ENTITY
 CONF_SUPPLY_TYPE = const_module.CONF_SUPPLY_TYPE
 
@@ -201,6 +203,8 @@ def test_config_flow_create_entry_success():
     assert result["type"] == "create_entry"
     assert result["title"] == "Tarifas Energia Brasil - CPFL-PIRATINING"
     assert result["data"][CONF_SUPPLY_TYPE] == "monofasico"
+    assert result["data"][CONF_ENABLE_GENERATION_GROUP] is True
+    assert result["data"][CONF_ENABLE_TARIFA_BRANCA_GROUP] is False
 
 
 def test_options_flow_requires_supply_type_when_generation_set():
@@ -224,7 +228,41 @@ def test_options_flow_create_entry_success():
         CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
         CONF_GENERATION_ENTITY: "sensor.geracao_total",
         CONF_SUPPLY_TYPE: "bifasico",
+        CONF_ENABLE_GENERATION_GROUP: False,
+        CONF_ENABLE_TARIFA_BRANCA_GROUP: True,
     }
     result = asyncio.run(flow.async_step_init(user_input))
     assert result["type"] == "create_entry"
     assert result["data"][CONF_SUPPLY_TYPE] == "bifasico"
+    assert result["data"][CONF_ENABLE_GENERATION_GROUP] is False
+    assert result["data"][CONF_ENABLE_TARIFA_BRANCA_GROUP] is True
+
+
+def test_options_flow_forces_generation_group_off_without_generation_entity():
+    entry = sys.modules["homeassistant.config_entries"].ConfigEntry(data={}, options={})
+    flow = TarifasEnergiaBrasilOptionsFlow(entry)
+    user_input = {
+        CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+        CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
+        CONF_ENABLE_GENERATION_GROUP: True,
+        CONF_ENABLE_TARIFA_BRANCA_GROUP: False,
+    }
+    result = asyncio.run(flow.async_step_init(user_input))
+    assert result["type"] == "create_entry"
+    assert result["data"][CONF_ENABLE_GENERATION_GROUP] is False
+
+
+def test_options_flow_injects_legacy_defaults():
+    entry = sys.modules["homeassistant.config_entries"].ConfigEntry(
+        data={
+            CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+            CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
+            CONF_GENERATION_ENTITY: "sensor.geracao_total",
+            CONF_SUPPLY_TYPE: "monofasico",
+        },
+        options={},
+    )
+    flow = TarifasEnergiaBrasilOptionsFlow(entry)
+    defaults = flow._current_defaults(None)
+    assert defaults[CONF_ENABLE_GENERATION_GROUP] is True
+    assert defaults[CONF_ENABLE_TARIFA_BRANCA_GROUP] is True
