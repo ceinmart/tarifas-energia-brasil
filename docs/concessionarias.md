@@ -12,6 +12,11 @@
 - CEMIG-D
 - ENEL SP
 
+Extratores internos parciais ja implementados:
+
+- `RGE SUL`: parser HTML para PIS/COFINS/ICMS (mantida pendencia de validacao mensal aberta).
+- `CEMIG-D`: parser HTML para PIS/COFINS (ICMS em fallback com pendencia de validacao oficial).
+
 ## Regra de suporte
 
 A concessionaria so deve aparecer no fluxo de configuracao quando a extracao de:

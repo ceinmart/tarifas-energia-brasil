@@ -26,6 +26,11 @@
   - `custom_components/tarifas_energia_brasil/tributos/parsers.py`
   - `tests/test_tributos_parsers.py`
   - `tests/test_credito_ledger.py`
+- Testes de fluxo:
+  - validacao de `config_flow` e `options_flow` em `tests/test_config_flow.py`
+- Extratores internos adicionais (mantidos fora do fluxo de suporte):
+  - `RGE SUL` (parcial)
+  - `CEMIG-D` (parcial)
 - Workflows CI:
   - `hacs.yaml`
   - `hassfest.yaml`

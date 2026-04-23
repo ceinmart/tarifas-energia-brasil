@@ -73,3 +73,29 @@ def test_parser_fallback_when_missing_fields():
     assert pis == pytest.approx(1.10)
     assert cofins == pytest.approx(5.02)
     assert icms == pytest.approx(12.0)
+
+
+def test_parse_rge_html_fixture():
+    html = _read_fixture("rge_tributos_sample.html")
+    pis, cofins, icms = parser.parse_rge_tributos_html(
+        raw_html=html,
+        fallback_pis=1.10,
+        fallback_cofins=5.02,
+        fallback_icms=17.0,
+    )
+    assert pis == pytest.approx(1.05)
+    assert cofins == pytest.approx(4.85)
+    assert icms == pytest.approx(17.0)
+
+
+def test_parse_cemig_html_fixture():
+    html = _read_fixture("cemig_tributos_sample.html")
+    pis, cofins, icms = parser.parse_cemig_tributos_html(
+        raw_html=html,
+        fallback_pis=1.10,
+        fallback_cofins=5.02,
+        fallback_icms=0.0,
+    )
+    assert pis == pytest.approx(1.20)
+    assert cofins == pytest.approx(5.50)
+    assert icms == pytest.approx(0.0)

@@ -57,6 +57,11 @@ Mapeadas mas ainda nao suportadas no fluxo:
 - `CEMIG-D` (pendencia de ICMS aberto por faixa).
 - `ENEL SP` (pendencia em PIS/COFINS mensal aberto).
 
+Extratores internos parciais implementados (nao habilitados no fluxo):
+
+- `RGE SUL`: parser de HTML para PIS/COFINS/ICMS com pendencia de validacao mensal completa.
+- `CEMIG-D`: parser de HTML para PIS/COFINS; ICMS permanece em fallback pendente de validacao oficial.
+
 ## Fontes oficiais
 
 APIs ANEEL:

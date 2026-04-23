@@ -47,7 +47,7 @@ def extract_percent_near_keywords(
 
         # Caso comum: "pis 1,12%" ou "cofins 5.12%"
         match_forward = re.search(
-            rf"{re.escape(keyword_norm)}[^0-9]{{0,80}}(\d{{1,2}}(?:[.,]\d{{1,4}})?)\s*%",
+            rf"{re.escape(keyword_norm)}.{{0,80}}?(\d{{1,2}}(?:[.,]\d{{1,4}})?)\s*%",
             excerpt,
         )
         if match_forward:
@@ -76,6 +76,8 @@ def parse_cpfl_tributos_html(
     cofins = extract_percent_near_keywords(text, ("COFINS",))
 
     guessed_pis, guessed_cofins = guess_pis_cofins_from_percent_list(text)
+    if cofins > 0 and pis > 0 and cofins <= pis and guessed_cofins > 0:
+        cofins = guessed_cofins
     return (
         pis if pis > 0 else (guessed_pis if guessed_pis > 0 else fallback_pis),
         cofins if cofins > 0 else (guessed_cofins if guessed_cofins > 0 else fallback_cofins),
@@ -109,6 +111,53 @@ def parse_celesc_tributos_html(
     )
 
 
+def parse_rge_tributos_html(
+    raw_html: str,
+    fallback_pis: float,
+    fallback_cofins: float,
+    fallback_icms: float,
+) -> tuple[float, float, float]:
+    """Extrai tributos RGE com foco em ICMS residencial."""
+
+    text = normalize_text(raw_html)
+    pis = extract_percent_near_keywords(text, ("PIS", "PIS/PASEP"))
+    cofins = extract_percent_near_keywords(text, ("COFINS",))
+
+    icms_candidates = _extract_percent_candidates(text)
+    icms_residencial = max(
+        [value for value in icms_candidates if 10.0 <= value <= 35.0],
+        default=0.0,
+    )
+
+    return (
+        pis if pis > 0 else fallback_pis,
+        cofins if cofins > 0 else fallback_cofins,
+        icms_residencial if icms_residencial > 0 else fallback_icms,
+    )
+
+
+def parse_cemig_tributos_html(
+    raw_html: str,
+    fallback_pis: float,
+    fallback_cofins: float,
+    fallback_icms: float,
+) -> tuple[float, float, float]:
+    """Extrai PIS/COFINS da CEMIG e usa fallback para ICMS pendente."""
+
+    text = normalize_text(raw_html)
+    pis = extract_percent_near_keywords(text, ("PIS", "PIS/PASEP", "PASEP"))
+    cofins = extract_percent_near_keywords(text, ("COFINS",))
+
+    guessed_pis, guessed_cofins = guess_pis_cofins_from_percent_list(text)
+    if cofins > 0 and pis > 0 and cofins <= pis and guessed_cofins > 0:
+        cofins = guessed_cofins
+    return (
+        pis if pis > 0 else (guessed_pis if guessed_pis > 0 else fallback_pis),
+        cofins if cofins > 0 else (guessed_cofins if guessed_cofins > 0 else fallback_cofins),
+        fallback_icms,
+    )
+
+
 def _to_float_percent(value: str) -> float:
     """Converte string percentual para float."""
 
@@ -135,3 +184,16 @@ def guess_pis_cofins_from_percent_list(text: str) -> tuple[float, float]:
     if len(unique_sorted) == 1:
         return unique_sorted[0], 0.0
     return 0.0, 0.0
+
+
+def _extract_percent_candidates(text: str) -> list[float]:
+    """Lista percentuais candidatos de um texto normalizado."""
+
+    raw = re.findall(r"(\d{1,2}(?:[.,]\d{1,4})?)\s*%", normalize_key(text))
+    parsed: list[float] = []
+    for item in raw:
+        try:
+            parsed.append(_to_float_percent(item))
+        except ValueError:
+            continue
+    return parsed

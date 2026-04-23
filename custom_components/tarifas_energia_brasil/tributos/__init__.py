@@ -14,7 +14,12 @@ import aiohttp
 
 from ..const import ATTR_CONFIANCA_ALTA, ATTR_CONFIANCA_MEDIA
 from ..models import CollectionMetadata, TributosData
-from .parsers import parse_celesc_tributos_html, parse_cpfl_tributos_html
+from .parsers import (
+    parse_celesc_tributos_html,
+    parse_cemig_tributos_html,
+    parse_cpfl_tributos_html,
+    parse_rge_tributos_html,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +55,22 @@ _TRIBUTOS_FALLBACK: Final[dict[str, TributosFallback]] = {
         icms=12.00,
         fonte="https://www.celesc.com.br/tarifas-de-energia",
         confianca=ATTR_CONFIANCA_ALTA,
+    ),
+    "RGE SUL": TributosFallback(
+        pis=1.10,
+        cofins=5.02,
+        icms=17.00,
+        fonte="https://www.rge-rs.com.br/tributos-municipais-estaduais-e-federais",
+        confianca=ATTR_CONFIANCA_MEDIA,
+        pendencias=("PIS/COFINS mensal aberto ainda pendente de validacao completa.",),
+    ),
+    "CEMIG-D": TributosFallback(
+        pis=1.10,
+        cofins=5.02,
+        icms=0.00,
+        fonte="https://www.cemig.com.br/valores-e-tarifas/pis-cofins-e-pasep/",
+        confianca=ATTR_CONFIANCA_MEDIA,
+        pendencias=("ICMS aberto por faixa ainda pendente de validacao oficial.",),
     ),
 }
 
@@ -138,6 +159,22 @@ async def _fetch_and_parse_tributos(
 
     if concessionaria == "CELESC":
         return parse_celesc_tributos_html(
+            raw_html=html,
+            fallback_pis=fallback.pis,
+            fallback_cofins=fallback.cofins,
+            fallback_icms=fallback.icms,
+        )
+
+    if concessionaria == "RGE SUL":
+        return parse_rge_tributos_html(
+            raw_html=html,
+            fallback_pis=fallback.pis,
+            fallback_cofins=fallback.cofins,
+            fallback_icms=fallback.icms,
+        )
+
+    if concessionaria == "CEMIG-D":
+        return parse_cemig_tributos_html(
             raw_html=html,
             fallback_pis=fallback.pis,
             fallback_cofins=fallback.cofins,
