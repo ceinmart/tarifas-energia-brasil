@@ -1,0 +1,230 @@
+"""Versao: 0.1.0
+Criado em: 2026-04-23 10:00:00 -03:00
+Criado por: Codex
+Projeto/pasta: ha.ext.tarifas
+"""
+
+from __future__ import annotations
+
+import asyncio
+import importlib.util
+import sys
+import types
+from dataclasses import dataclass
+from enum import StrEnum
+from pathlib import Path
+
+
+def _install_fake_homeassistant_modules() -> None:
+    """Instala stubs minimos do Home Assistant para testar config_flow."""
+
+    if "homeassistant" in sys.modules:
+        return
+
+    homeassistant = types.ModuleType("homeassistant")
+    config_entries = types.ModuleType("homeassistant.config_entries")
+    helpers = types.ModuleType("homeassistant.helpers")
+    selector = types.ModuleType("homeassistant.helpers.selector")
+    const = types.ModuleType("homeassistant.const")
+
+    class Platform(StrEnum):
+        SENSOR = "sensor"
+
+    const.Platform = Platform
+
+    class SelectSelectorMode(StrEnum):
+        DROPDOWN = "dropdown"
+        LIST = "list"
+
+    @dataclass
+    class SelectSelectorConfig:
+        options: list[str]
+        mode: SelectSelectorMode | None = None
+        multiple: bool = False
+
+    @dataclass
+    class EntitySelectorConfig:
+        domain: list[str] | None = None
+        device_class: list[str] | None = None
+
+    class SelectSelector:
+        def __init__(self, config: SelectSelectorConfig) -> None:
+            self.config = config
+
+        def __call__(self, value):  # noqa: ANN001
+            return value
+
+    class EntitySelector:
+        def __init__(self, config: EntitySelectorConfig) -> None:
+            self.config = config
+
+        def __call__(self, value):  # noqa: ANN001
+            return value
+
+    selector.SelectSelectorMode = SelectSelectorMode
+    selector.SelectSelectorConfig = SelectSelectorConfig
+    selector.EntitySelectorConfig = EntitySelectorConfig
+    selector.SelectSelector = SelectSelector
+    selector.EntitySelector = EntitySelector
+
+    class ConfigFlow:
+        def __init_subclass__(cls, **kwargs) -> None:  # noqa: ANN001
+            return None
+
+        async def async_set_unique_id(self, unique_id: str) -> None:
+            self._unique_id = unique_id
+
+        def _abort_if_unique_id_configured(self) -> None:
+            return None
+
+        def async_create_entry(self, title: str, data: dict) -> dict:
+            return {
+                "type": "create_entry",
+                "title": title,
+                "data": data,
+            }
+
+        def async_show_form(self, step_id: str, data_schema, errors: dict) -> dict:  # noqa: ANN001
+            return {
+                "type": "form",
+                "step_id": step_id,
+                "data_schema": data_schema,
+                "errors": errors,
+            }
+
+    class OptionsFlow:
+        def async_create_entry(self, title: str, data: dict) -> dict:
+            return {
+                "type": "create_entry",
+                "title": title,
+                "data": data,
+            }
+
+        def async_show_form(self, step_id: str, data_schema, errors: dict) -> dict:  # noqa: ANN001
+            return {
+                "type": "form",
+                "step_id": step_id,
+                "data_schema": data_schema,
+                "errors": errors,
+            }
+
+    @dataclass
+    class ConfigEntry:
+        data: dict
+        options: dict
+
+    def callback(func):  # noqa: ANN001
+        return func
+
+    config_entries.ConfigFlow = ConfigFlow
+    config_entries.OptionsFlow = OptionsFlow
+    config_entries.ConfigEntry = ConfigEntry
+    config_entries.callback = callback
+
+    helpers.selector = selector
+    homeassistant.config_entries = config_entries
+    homeassistant.helpers = helpers
+    homeassistant.const = const
+
+    sys.modules["homeassistant"] = homeassistant
+    sys.modules["homeassistant.config_entries"] = config_entries
+    sys.modules["homeassistant.helpers"] = helpers
+    sys.modules["homeassistant.helpers.selector"] = selector
+    sys.modules["homeassistant.const"] = const
+
+
+_install_fake_homeassistant_modules()
+
+
+def _load_module(module_name: str, file_path: Path):
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_BASE_DIR = (
+    Path(__file__).resolve().parents[1]
+    / "custom_components"
+    / "tarifas_energia_brasil"
+)
+_PKG_NAME = "tarifas_energia_brasil_testpkg"
+
+if _PKG_NAME not in sys.modules:
+    pkg = types.ModuleType(_PKG_NAME)
+    pkg.__path__ = [str(_BASE_DIR)]  # type: ignore[attr-defined]
+    sys.modules[_PKG_NAME] = pkg
+
+const_module = _load_module(f"{_PKG_NAME}.const", _BASE_DIR / "const.py")
+config_flow_module = _load_module(f"{_PKG_NAME}.config_flow", _BASE_DIR / "config_flow.py")
+
+TarifasEnergiaBrasilConfigFlow = config_flow_module.TarifasEnergiaBrasilConfigFlow
+TarifasEnergiaBrasilOptionsFlow = config_flow_module.TarifasEnergiaBrasilOptionsFlow
+CONF_CONCESSIONARIA = const_module.CONF_CONCESSIONARIA
+CONF_CONSUMPTION_ENTITY = const_module.CONF_CONSUMPTION_ENTITY
+CONF_GENERATION_ENTITY = const_module.CONF_GENERATION_ENTITY
+CONF_SUPPLY_TYPE = const_module.CONF_SUPPLY_TYPE
+
+
+def test_config_flow_show_form_initial():
+    flow = TarifasEnergiaBrasilConfigFlow()
+    result = asyncio.run(flow.async_step_user())
+    assert result["type"] == "form"
+    assert result["step_id"] == "user"
+    assert result["errors"] == {}
+
+
+def test_config_flow_requires_supply_type_when_generation_set():
+    flow = TarifasEnergiaBrasilConfigFlow()
+    user_input = {
+        CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+        CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
+        CONF_GENERATION_ENTITY: "sensor.geracao_total",
+    }
+    result = asyncio.run(flow.async_step_user(user_input))
+    assert result["type"] == "form"
+    assert result["errors"].get("base") == "supply_type_required"
+
+
+def test_config_flow_create_entry_success():
+    flow = TarifasEnergiaBrasilConfigFlow()
+    user_input = {
+        CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+        CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
+        CONF_GENERATION_ENTITY: "sensor.geracao_total",
+        CONF_SUPPLY_TYPE: "monofasico",
+    }
+    result = asyncio.run(flow.async_step_user(user_input))
+    assert result["type"] == "create_entry"
+    assert result["title"] == "Tarifas Energia Brasil - CPFL-PIRATINING"
+    assert result["data"][CONF_SUPPLY_TYPE] == "monofasico"
+
+
+def test_options_flow_requires_supply_type_when_generation_set():
+    entry = sys.modules["homeassistant.config_entries"].ConfigEntry(data={}, options={})
+    flow = TarifasEnergiaBrasilOptionsFlow(entry)
+    user_input = {
+        CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+        CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
+        CONF_GENERATION_ENTITY: "sensor.geracao_total",
+    }
+    result = asyncio.run(flow.async_step_init(user_input))
+    assert result["type"] == "form"
+    assert result["errors"].get("base") == "supply_type_required"
+
+
+def test_options_flow_create_entry_success():
+    entry = sys.modules["homeassistant.config_entries"].ConfigEntry(data={}, options={})
+    flow = TarifasEnergiaBrasilOptionsFlow(entry)
+    user_input = {
+        CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+        CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
+        CONF_GENERATION_ENTITY: "sensor.geracao_total",
+        CONF_SUPPLY_TYPE: "bifasico",
+    }
+    result = asyncio.run(flow.async_step_init(user_input))
+    assert result["type"] == "create_entry"
+    assert result["data"][CONF_SUPPLY_TYPE] == "bifasico"
