@@ -1,0 +1,10 @@
+{
+  "name": "Tarifas Energia Brasil",
+  "country": "BR",
+  "domains": [
+    "tarifas_energia_brasil"
+  ],
+  "homeassistant": "2024.12.0",
+  "render_readme": true,
+  "content_in_root": false
+}
