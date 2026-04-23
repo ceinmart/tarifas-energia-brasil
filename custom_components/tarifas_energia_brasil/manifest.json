@@ -1,0 +1,18 @@
+{
+  "domain": "tarifas_energia_brasil",
+  "name": "Tarifas Energia Brasil",
+  "codeowners": [
+    "@ceinmart"
+  ],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/ceinmart/tarifas-energia-brasil",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/ceinmart/tarifas-energia-brasil/issues",
+  "loggers": [
+    "custom_components.tarifas_energia_brasil"
+  ],
+  "requirements": [],
+  "version": "0.1.0-alpha.1"
+}
