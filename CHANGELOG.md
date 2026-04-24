@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.4 - 2026-04-24
+
+### Corrigido
+
+- Listener de mudanca das entidades de consumo/geracao agora roda no event loop do Home Assistant, evitando o erro frequente de thread safety ao atualizar sensores via `async_update_listeners()`.
+- Apuracao temporal da Tarifa Branca passou a respeitar o fuso horario da leitura recebida antes de classificar os intervalos.
+
+### Testes
+
+- Stub de testes do coordinator atualizado para cobrir o decorador `callback` do Home Assistant.
+
 ## 0.1.0-alpha.3 - 2026-04-23
 
 ### Alterado

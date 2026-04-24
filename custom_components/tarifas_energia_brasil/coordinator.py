@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
@@ -334,6 +334,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             except Exception:  # pragma: no cover - defensivo para runtime HA
                 _LOGGER.debug("Falha ao remover listener de estado.", exc_info=True)
 
+    @callback
     def _handle_tracked_state_change(self, event: Any) -> None:
         """Atualiza snapshot dinamico sem nova chamada externa."""
 

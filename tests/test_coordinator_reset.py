@@ -57,6 +57,9 @@ def _install_homeassistant_stub() -> None:
     class HomeAssistant:
         pass
 
+    def callback(func):  # noqa: ANN001
+        return func
+
     def async_get_clientsession(hass):  # noqa: ANN001
         return None
 
@@ -96,6 +99,7 @@ def _install_homeassistant_stub() -> None:
 
     const.Platform = getattr(const, "Platform", Platform)
     config_entries.ConfigEntry = getattr(config_entries, "ConfigEntry", ConfigEntry)
+    core.callback = getattr(core, "callback", callback)
     core.HomeAssistant = getattr(core, "HomeAssistant", HomeAssistant)
     aiohttp_client.async_get_clientsession = async_get_clientsession
     event.async_track_state_change_event = async_track_state_change_event
