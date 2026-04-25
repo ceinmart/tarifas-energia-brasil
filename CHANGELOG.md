@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.7 - 2026-04-25
+
+### Corrigido
+
+- Quebras diaria, semanal e mensal agora publicam o novo periodo zerado quando uma leitura termina exatamente na virada do dia, semana ou ciclo mensal.
+- Ciclo mensal com dia de leitura configurado, como dia `24`, passa a fechar corretamente na virada do dia anterior para o dia configurado.
+- Updates dinamicos das entidades agora recalculam ICMS por faixa usando o consumo mensal apurado como base.
+- Tarifas finais e Fio B passam a ser recalculados quando a faixa de ICMS muda durante o ciclo, corrigindo os valores de conta regular e conta com geracao.
+
+### Testes
+
+- Cobertura adicionada para virada diaria/mensal no dia de leitura, virada semanal e recalculo de ICMS por consumo mensal.
+
 ## 0.1.0-alpha.6 - 2026-04-24
 
 ### Adicionado

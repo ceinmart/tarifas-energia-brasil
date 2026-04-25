@@ -251,6 +251,76 @@ def test_scalar_period_state_does_not_copy_reset_total_to_every_breakdown():
     assert values[BREAKDOWN_MONTHLY] == pytest.approx(291.83)
 
 
+def test_scalar_period_state_resets_when_update_ends_at_midnight():
+    coordinator = _build_coordinator()
+    start = datetime(2026, 4, 23, 23, 0, tzinfo=UTC)
+    end = datetime(2026, 4, 24, 0, 0, tzinfo=UTC)
+    period_state = TarifasEnergiaBrasilCoordinator._new_period_state()
+    period_state[BREAKDOWN_DAILY]["key"] = "2026-04-23"
+    period_state[BREAKDOWN_DAILY]["kwh"] = 12.0
+    period_state[BREAKDOWN_WEEKLY]["key"] = "2026-W17"
+    period_state[BREAKDOWN_WEEKLY]["kwh"] = 80.0
+    period_state[BREAKDOWN_MONTHLY]["key"] = "2026-03-D24"
+    period_state[BREAKDOWN_MONTHLY]["kwh"] = 605.29
+    delta_context = {
+        "has_previous": True,
+        "delta_kwh": 2.0,
+        "raw_delta_kwh": 2.0,
+        "reset_detected": False,
+        "start": start,
+        "end": end,
+    }
+
+    values, rollovers = coordinator._apply_scalar_delta_context(
+        period_state,
+        end,
+        reading_day=24,
+        delta_context=delta_context,
+    )
+
+    assert values[BREAKDOWN_DAILY] == pytest.approx(0.0)
+    assert values[BREAKDOWN_WEEKLY] == pytest.approx(82.0)
+    assert values[BREAKDOWN_MONTHLY] == pytest.approx(0.0)
+    assert period_state[BREAKDOWN_DAILY]["key"] == "2026-04-24"
+    assert period_state[BREAKDOWN_MONTHLY]["key"] == "2026-04-D24"
+    assert dict(rollovers[BREAKDOWN_DAILY])["2026-04-23"] == pytest.approx(14.0)
+    assert dict(rollovers[BREAKDOWN_MONTHLY])["2026-03-D24"] == pytest.approx(607.29)
+
+
+def test_scalar_period_state_resets_week_when_update_ends_on_monday_midnight():
+    coordinator = _build_coordinator()
+    start = datetime(2026, 4, 26, 23, 0, tzinfo=UTC)
+    end = datetime(2026, 4, 27, 0, 0, tzinfo=UTC)
+    period_state = TarifasEnergiaBrasilCoordinator._new_period_state()
+    period_state[BREAKDOWN_DAILY]["key"] = "2026-04-26"
+    period_state[BREAKDOWN_DAILY]["kwh"] = 8.0
+    period_state[BREAKDOWN_WEEKLY]["key"] = "2026-W17"
+    period_state[BREAKDOWN_WEEKLY]["kwh"] = 95.0
+    period_state[BREAKDOWN_MONTHLY]["key"] = "2026-04-D24"
+    period_state[BREAKDOWN_MONTHLY]["kwh"] = 20.0
+    delta_context = {
+        "has_previous": True,
+        "delta_kwh": 3.0,
+        "raw_delta_kwh": 3.0,
+        "reset_detected": False,
+        "start": start,
+        "end": end,
+    }
+
+    values, rollovers = coordinator._apply_scalar_delta_context(
+        period_state,
+        end,
+        reading_day=24,
+        delta_context=delta_context,
+    )
+
+    assert values[BREAKDOWN_DAILY] == pytest.approx(0.0)
+    assert values[BREAKDOWN_WEEKLY] == pytest.approx(0.0)
+    assert values[BREAKDOWN_MONTHLY] == pytest.approx(23.0)
+    assert period_state[BREAKDOWN_WEEKLY]["key"] == "2026-W18"
+    assert dict(rollovers[BREAKDOWN_WEEKLY])["2026-W17"] == pytest.approx(98.0)
+
+
 def test_tarifa_branca_state_does_not_copy_reset_total_to_current_posto():
     coordinator = _build_coordinator()
     now = datetime(2026, 4, 23, 15, 0, tzinfo=UTC)
@@ -375,3 +445,40 @@ def test_dynamic_values_calculate_auto_consumo_from_injection_entity_totals():
     )
 
     assert values["auto_consumo_kwh"] == pytest.approx(110.08)
+
+
+def test_dynamic_icms_refresh_uses_monthly_consumption_base():
+    coordinator = _build_coordinator()
+    values = {
+        "te_convencional_r_kwh": 0.34405,
+        "tusd_convencional_r_kwh": 0.39564,
+        "tarifa_convencional_bruta_r_kwh": 0.73969,
+        "tarifa_convencional_final_r_kwh": 0.0,
+        "te_branca_fora_ponta_r_kwh": 0.32816,
+        "tusd_branca_fora_ponta_r_kwh": 0.29282,
+        "te_branca_intermediario_r_kwh": 0.32816,
+        "tusd_branca_intermediario_r_kwh": 0.51559,
+        "te_branca_ponta_r_kwh": 0.51884,
+        "tusd_branca_ponta_r_kwh": 0.73837,
+        "fio_b_bruto_r_kwh": 0.189008164374,
+        "fio_b_final_r_kwh": 0.0,
+        "pis_percent": 1.10,
+        "cofins_percent": 5.02,
+        "icms_percent": 12.0,
+    }
+
+    source = coordinator._refresh_icms_dependent_values(
+        values=values,
+        concessionaria="CPFL-PIRATINING",
+        consumo_mensal_kwh=250.0,
+        fallback_icms_percent=12.0,
+        has_consumo_history=True,
+        reference_date=datetime(2026, 4, 24, tzinfo=UTC).date(),
+    )
+
+    assert source == "regra_faixa_consumo"
+    assert values["icms_percent"] == pytest.approx(18.0)
+    assert values["tarifa_convencional_final_r_kwh"] == pytest.approx(
+        0.9748154981549815
+    )
+    assert values["fio_b_final_r_kwh"] == pytest.approx(0.14945295021665786)

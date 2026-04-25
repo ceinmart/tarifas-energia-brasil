@@ -384,6 +384,22 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             reading_day=int(self._effective_value(CONF_READING_DAY, DEFAULT_READING_DAY)),
             tariff_context=self._cached_rollover_context(),
         )
+        icms_source = self._refresh_icms_dependent_values(
+            values=self.data.values,
+            concessionaria=self.data.concessionaria,
+            consumo_mensal_kwh=float(
+                self._consumo_period_state[BREAKDOWN_MONTHLY]["kwh"]
+            ),
+            fallback_icms_percent=float(
+                self.data.diagnostics.get(
+                    "icms_percent_base_fonte",
+                    self.data.values.get("icms_percent", 0.0) or 0.0,
+                )
+                or 0.0
+            ),
+            has_consumo_history=True,
+            reference_date=now.date(),
+        )
         self._apply_dynamic_values_to_snapshot(
             values=self.data.values,
             enabled_breakdowns=self._effective_breakdowns(),
@@ -402,6 +418,10 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             ),
         )
         self.data.updated_at = now
+        self.data.diagnostics["icms_source"] = icms_source
+        self.data.diagnostics["icms_percent_aplicado"] = self.data.values.get(
+            "icms_percent"
+        )
         self._update_dynamic_diagnostics(now)
         self._schedule_state_save()
         self.async_update_listeners()
@@ -570,6 +590,9 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                     period_state[period]["key"] = period_key
                     period_state[period]["kwh"] = 0.0
                 period_state[period]["kwh"] = float(period_state[period]["kwh"]) + segment_delta
+        current_rollovers = self._ensure_scalar_current_keys(period_state, now, reading_day)
+        for period, items in current_rollovers.items():
+            rollovers.setdefault(period, []).extend(items)
         return self._current_period_values(period_state), rollovers
 
     def _apply_tarifa_branca_delta_context(
@@ -628,7 +651,93 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                 period_state[period]["postos"][posto] = (
                     float(period_state[period]["postos"][posto]) + segment_delta
                 )
+        current_rollovers = self._ensure_posto_current_keys(period_state, now, reading_day)
+        for period, items in current_rollovers.items():
+            rollovers.setdefault(period, []).extend(items)
         return self._current_posto_period_values(period_state), rollovers
+
+    def _refresh_icms_dependent_values(
+        self,
+        values: dict[str, float | str | bool | None],
+        concessionaria: str,
+        consumo_mensal_kwh: float,
+        fallback_icms_percent: float,
+        has_consumo_history: bool,
+        reference_date: date,
+    ) -> str:
+        """Recalcula ICMS e tarifas finais usando o consumo mensal apurado."""
+
+        if has_consumo_history or consumo_mensal_kwh > 0:
+            icms_aplicado_percent, icms_source = resolve_icms_percent(
+                concessionaria=concessionaria,
+                consumo_mensal_kwh=consumo_mensal_kwh,
+                fallback_icms_percent=fallback_icms_percent,
+            )
+        else:
+            icms_aplicado_percent = fallback_icms_percent
+            icms_source = "fallback_bootstrap_sem_historico"
+
+        pis_percent = float(values.get("pis_percent", 0.0) or 0.0)
+        cofins_percent = float(values.get("cofins_percent", 0.0) or 0.0)
+        tarifa_conv_bruta, tarifa_conv_final = calcular_tarifa_convencional(
+            te_convencional_r_kwh=float(values.get("te_convencional_r_kwh", 0.0) or 0.0),
+            tusd_convencional_r_kwh=float(
+                values.get("tusd_convencional_r_kwh", 0.0) or 0.0
+            ),
+            pis_percent=pis_percent,
+            cofins_percent=cofins_percent,
+            icms_percent=icms_aplicado_percent,
+        )
+        tarifa_branca = calcular_tarifa_branca_por_posto(
+            te_por_posto_r_kwh={
+                "fora_ponta": float(values.get("te_branca_fora_ponta_r_kwh", 0.0) or 0.0),
+                "intermediario": float(
+                    values.get("te_branca_intermediario_r_kwh", 0.0) or 0.0
+                ),
+                "ponta": float(values.get("te_branca_ponta_r_kwh", 0.0) or 0.0),
+            },
+            tusd_por_posto_r_kwh={
+                "fora_ponta": float(
+                    values.get("tusd_branca_fora_ponta_r_kwh", 0.0) or 0.0
+                ),
+                "intermediario": float(
+                    values.get("tusd_branca_intermediario_r_kwh", 0.0) or 0.0
+                ),
+                "ponta": float(values.get("tusd_branca_ponta_r_kwh", 0.0) or 0.0),
+            },
+            pis_percent=pis_percent,
+            cofins_percent=cofins_percent,
+            icms_percent=icms_aplicado_percent,
+        )
+        values["tarifa_convencional_bruta_r_kwh"] = tarifa_conv_bruta
+        values["tarifa_convencional_final_r_kwh"] = tarifa_conv_final
+        values["tarifa_branca_fora_ponta_bruta_r_kwh"] = tarifa_branca["fora_ponta"][
+            "tarifa_bruta_r_kwh"
+        ]
+        values["tarifa_branca_fora_ponta_final_r_kwh"] = tarifa_branca["fora_ponta"][
+            "tarifa_final_r_kwh"
+        ]
+        values["tarifa_branca_intermediario_bruta_r_kwh"] = tarifa_branca[
+            "intermediario"
+        ]["tarifa_bruta_r_kwh"]
+        values["tarifa_branca_intermediario_final_r_kwh"] = tarifa_branca[
+            "intermediario"
+        ]["tarifa_final_r_kwh"]
+        values["tarifa_branca_ponta_bruta_r_kwh"] = tarifa_branca["ponta"][
+            "tarifa_bruta_r_kwh"
+        ]
+        values["tarifa_branca_ponta_final_r_kwh"] = tarifa_branca["ponta"][
+            "tarifa_final_r_kwh"
+        ]
+        values["icms_percent"] = icms_aplicado_percent
+        values["fio_b_final_r_kwh"] = calcular_fio_b_final(
+            fio_b_bruto_r_kwh=float(values.get("fio_b_bruto_r_kwh", 0.0) or 0.0),
+            ano=reference_date.year,
+            pis_percent=pis_percent,
+            cofins_percent=cofins_percent,
+            icms_percent=icms_aplicado_percent,
+        )
+        return icms_source
 
     def _cached_rollover_context(self) -> dict[str, float]:
         """Retorna contexto tarifario atual para rollover de ciclo sem nova coleta."""
