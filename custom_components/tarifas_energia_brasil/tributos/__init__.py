@@ -21,6 +21,8 @@ from .parsers import (
     parse_rge_tributos_html,
 )
 
+TRIBUTOS_HTTP_TIMEOUT_SECONDS = 60
+
 
 @dataclass(frozen=True, slots=True)
 class TributosFallback:
@@ -145,7 +147,7 @@ async def _fetch_and_parse_tributos(
 ) -> tuple[float, float, float]:
     """Busca HTML oficial e aplica parser especifico por concessionaria."""
 
-    async with session.get(fallback.fonte, timeout=30) as response:
+    async with session.get(fallback.fonte, timeout=TRIBUTOS_HTTP_TIMEOUT_SECONDS) as response:
         response.raise_for_status()
         html = await response.text()
 

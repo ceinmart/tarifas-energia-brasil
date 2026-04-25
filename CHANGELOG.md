@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.8 - 2026-04-25
+
+### Adicionado
+
+- Novas entidades mensais sem custo de disponibilidade para consumo regular, Tarifa Branca e conta com geracao/SCEE.
+
+### Alterado
+
+- Sensores mensais de valor de conta passam a representar a conta faturavel, aplicando custo de disponibilidade quando ele for maior que o consumo calculado.
+- Quebras diaria e semanal deixam de aplicar custo de disponibilidade, mantendo apenas o valor real apurado no periodo.
+- Coleta ANEEL via CSV passa a filtrar registros em streaming e usar timeouts maiores para fontes lentas.
+- Coleta de tributos passa a usar timeout HTTP maior.
+
+### Testes
+
+- Cobertura adicionada para disponibilidade mensal versus quebras diaria/semanal.
+- Cobertura adicionada para as novas entidades mensais sem disponibilidade.
+- Cobertura adicionada para timeouts e parsing em streaming da coleta ANEEL/tributos.
+
 ## 0.1.0-alpha.7 - 2026-04-25
 
 ### Corrigido

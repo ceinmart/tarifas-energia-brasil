@@ -384,6 +384,18 @@ def build_sensor_descriptions(entry: ConfigEntry) -> tuple[TarifaSensorDescripti
                 group=ENTITY_GROUP_REGULAR,
             )
         )
+        if period == BREAKDOWN_MONTHLY:
+            dynamic_descriptions.append(
+                TarifaSensorDescription(
+                    key=f"valor_conta_consumo_regular_sem_disponibilidade_{period}_r",
+                    value_key=f"valor_conta_consumo_regular_sem_disponibilidade_{period}_r",
+                    name="Valor consumo regular mensal sem disponibilidade",
+                    native_unit_of_measurement=UNIT_R,
+                    device_class=SensorDeviceClass.MONETARY,
+                    state_class=SensorStateClass.MEASUREMENT,
+                    group=ENTITY_GROUP_REGULAR,
+                )
+            )
 
         if ENTITY_GROUP_TARIFA_BRANCA in enabled_groups:
             dynamic_descriptions.append(
@@ -397,6 +409,18 @@ def build_sensor_descriptions(entry: ConfigEntry) -> tuple[TarifaSensorDescripti
                     group=ENTITY_GROUP_TARIFA_BRANCA,
                 )
             )
+            if period == BREAKDOWN_MONTHLY:
+                dynamic_descriptions.append(
+                    TarifaSensorDescription(
+                        key=f"valor_conta_tarifa_branca_sem_disponibilidade_{period}_r",
+                        value_key=f"valor_conta_tarifa_branca_sem_disponibilidade_{period}_r",
+                        name="Valor tarifa branca mensal sem disponibilidade",
+                        native_unit_of_measurement=UNIT_R,
+                        device_class=SensorDeviceClass.MONETARY,
+                        state_class=SensorStateClass.MEASUREMENT,
+                        group=ENTITY_GROUP_TARIFA_BRANCA,
+                    )
+                )
 
         if ENTITY_GROUP_GENERATION in enabled_groups:
             dynamic_descriptions.extend(
@@ -421,6 +445,18 @@ def build_sensor_descriptions(entry: ConfigEntry) -> tuple[TarifaSensorDescripti
                     ),
                 )
             )
+            if period == BREAKDOWN_MONTHLY:
+                dynamic_descriptions.append(
+                    TarifaSensorDescription(
+                        key=f"valor_conta_com_geracao_sem_disponibilidade_{period}_r",
+                        value_key=f"valor_conta_com_geracao_sem_disponibilidade_{period}_r",
+                        name="Valor conta com geracao mensal sem disponibilidade",
+                        native_unit_of_measurement=UNIT_R,
+                        device_class=SensorDeviceClass.MONETARY,
+                        state_class=SensorStateClass.MEASUREMENT,
+                        group=ENTITY_GROUP_GENERATION,
+                    )
+                )
 
     descriptions = [
         description

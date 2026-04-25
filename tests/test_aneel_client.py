@@ -6,6 +6,7 @@ Projeto/pasta: ha.ext.tarifas
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import sys
 import types
@@ -163,7 +164,11 @@ def _install_aiohttp_stub() -> None:
     class ClientSession:  # noqa: D401 - stub minimo
         """Stub minimo para type hints do cliente."""
 
+    class ClientError(Exception):
+        pass
+
     aiohttp.ClientSession = ClientSession
+    aiohttp.ClientError = ClientError
     sys.modules["aiohttp"] = aiohttp
 
 
@@ -196,8 +201,66 @@ _load_module(f"{_PKG_NAME}.const", _BASE_DIR / "const.py")
 _load_module(f"{_PKG_NAME}.models", _BASE_DIR / "models.py")
 _load_module(f"{_PKG_NAME}.calculators", _BASE_DIR / "calculators.py")
 aneel_module = _load_module(f"{_PKG_NAME}.aneel_client", _BASE_DIR / "aneel_client.py")
+_load_module(f"{_PKG_NAME}.tributos.parsers", _BASE_DIR / "tributos" / "parsers.py")
+tributos_module = _load_module(f"{_PKG_NAME}.tributos", _BASE_DIR / "tributos" / "__init__.py")
 
 AneelClient = aneel_module.AneelClient
+ANEEL_CSV_TIMEOUT_SECONDS = aneel_module.ANEEL_CSV_TIMEOUT_SECONDS
+ANEEL_JSON_TIMEOUT_SECONDS = aneel_module.ANEEL_JSON_TIMEOUT_SECONDS
+TRIBUTOS_HTTP_TIMEOUT_SECONDS = tributos_module.TRIBUTOS_HTTP_TIMEOUT_SECONDS
+
+
+class _FakeStreamContent:
+    """Emite chunks de bytes como o StreamReader do aiohttp."""
+
+    def __init__(self, chunks: list[bytes]) -> None:
+        self._chunks = chunks
+
+    async def iter_chunked(self, _size: int):
+        for chunk in self._chunks:
+            yield chunk
+
+
+class _FakeResponse:
+    """Resposta HTTP minima para testar timeouts e parsing."""
+
+    def __init__(
+        self,
+        *,
+        payload: dict | None = None,
+        chunks: list[bytes] | None = None,
+        text: str = "",
+    ) -> None:
+        self._payload = payload or {}
+        self.content = _FakeStreamContent(chunks or [])
+        self._text = text
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):  # noqa: ANN001
+        return False
+
+    def raise_for_status(self) -> None:
+        return None
+
+    async def json(self, content_type=None):  # noqa: ANN001
+        return self._payload
+
+    async def text(self) -> str:
+        return self._text
+
+
+class _FakeSession:
+    """Sessao HTTP fake que registra chamadas e devolve respostas em fila."""
+
+    def __init__(self, responses: list[_FakeResponse]) -> None:
+        self._responses = responses
+        self.calls: list[dict] = []
+
+    def get(self, url, **kwargs):  # noqa: ANN001
+        self.calls.append({"url": url, **kwargs})
+        return self._responses.pop(0)
 
 
 def _tarifa_row(**overrides: str) -> dict[str, str]:
@@ -236,6 +299,83 @@ def _fio_b_row(**overrides: str) -> dict[str, str]:
     }
     row.update(overrides)
     return row
+
+
+def test_aneel_json_requests_use_extended_timeout():
+    session = _FakeSession(
+        [
+            _FakeResponse(
+                payload={
+                    "success": True,
+                    "result": {"records": []},
+                }
+            )
+        ]
+    )
+    client = AneelClient(session=session)
+
+    payload = asyncio.run(client._request_json("datastore_search", {"resource_id": "x"}))
+
+    assert payload["success"] is True
+    assert session.calls[0]["timeout"] == ANEEL_JSON_TIMEOUT_SECONDS
+    assert ANEEL_JSON_TIMEOUT_SECONDS == 120
+
+
+def test_csv_fallback_uses_extended_timeout_and_filters_streamed_chunks():
+    csv_chunks = [
+        b"SigAgente,Nome,Valor\nCPFL-PIR",
+        b'ATINING,"com, virgula",1\nOUTRA,x,2\nCPFL-PIRATINING,y,3',
+    ]
+    session = _FakeSession(
+        [
+            _FakeResponse(
+                payload={
+                    "success": True,
+                    "result": {"url": "https://example.test/aneel.csv"},
+                }
+            ),
+            _FakeResponse(chunks=csv_chunks),
+        ]
+    )
+    client = AneelClient(session=session)
+
+    records = asyncio.run(
+        client._csv_xml_records(
+            resource_id="resource-id",
+            filters={"SigAgente": "CPFL-PIRATINING"},
+        )
+    )
+
+    assert session.calls[0]["timeout"] == ANEEL_JSON_TIMEOUT_SECONDS
+    assert session.calls[1]["timeout"] == ANEEL_CSV_TIMEOUT_SECONDS
+    assert ANEEL_CSV_TIMEOUT_SECONDS == 600
+    assert records == [
+        {"SigAgente": "CPFL-PIRATINING", "Nome": "com, virgula", "Valor": "1"},
+        {"SigAgente": "CPFL-PIRATINING", "Nome": "y", "Valor": "3"},
+    ]
+
+
+def test_tributos_requests_use_extended_timeout():
+    fallback = tributos_module.TributosFallback(
+        pis=1.10,
+        cofins=5.02,
+        icms=12.00,
+        fonte="https://example.test/tributos",
+        confianca="alta",
+    )
+    session = _FakeSession([_FakeResponse(text="<html><body>sem tabela</body></html>")])
+
+    result = asyncio.run(
+        tributos_module._fetch_and_parse_tributos(
+            session=session,
+            concessionaria="CPFL-PIRATINING",
+            fallback=fallback,
+        )
+    )
+
+    assert result == pytest.approx((1.10, 5.02, 12.00))
+    assert session.calls[0]["timeout"] == TRIBUTOS_HTTP_TIMEOUT_SECONDS
+    assert TRIBUTOS_HTTP_TIMEOUT_SECONDS == 60
 
 
 def test_parse_tarifa_records_prefers_regular_residential_row():

@@ -447,6 +447,86 @@ def test_dynamic_values_calculate_auto_consumo_from_injection_entity_totals():
     assert values["auto_consumo_kwh"] == pytest.approx(110.08)
 
 
+def test_dynamic_values_apply_disponibilidade_only_to_monthly_bill_values():
+    coordinator = _build_coordinator()
+    coordinator._creditos_ledger = []
+
+    values = {
+        "tarifa_convencional_final_r_kwh": 0.7879100979974435,
+        "tarifa_branca_fora_ponta_final_r_kwh": 0.6614614401363442,
+        "tarifa_branca_intermediario_final_r_kwh": 0.8987537281636132,
+        "tarifa_branca_ponta_final_r_kwh": 1.3391670217298681,
+        "adicional_bandeira_r_kwh": 0.0,
+        "fio_b_final_r_kwh": 0.12079771902897314,
+    }
+    consumo_periodos = {
+        BREAKDOWN_DAILY: 0.22,
+        BREAKDOWN_WEEKLY: 0.22,
+        BREAKDOWN_MONTHLY: 0.22,
+    }
+    geracao_periodos = {
+        BREAKDOWN_DAILY: 0.0,
+        BREAKDOWN_WEEKLY: 0.0,
+        BREAKDOWN_MONTHLY: 0.0,
+    }
+    injecao_periodos = {
+        BREAKDOWN_DAILY: 0.0,
+        BREAKDOWN_WEEKLY: 0.0,
+        BREAKDOWN_MONTHLY: 0.0,
+    }
+    consumo_tarifa_branca = {
+        period: {"fora_ponta": 0.22, "intermediario": 0.0, "ponta": 0.0}
+        for period in (BREAKDOWN_DAILY, BREAKDOWN_WEEKLY, BREAKDOWN_MONTHLY)
+    }
+
+    coordinator._apply_dynamic_values_to_snapshot(
+        values=values,
+        enabled_breakdowns=[BREAKDOWN_DAILY, BREAKDOWN_WEEKLY, BREAKDOWN_MONTHLY],
+        consumo_periodos=consumo_periodos,
+        geracao_periodos=geracao_periodos,
+        injecao_periodos=injecao_periodos,
+        consumo_tarifa_branca=consumo_tarifa_branca,
+        has_generation=True,
+        has_injection=True,
+        geracao_total_kwh=311.9,
+        injecao_total_kwh=201.82,
+        tipo_fornecimento="trifasico",
+    )
+
+    valor_regular_real = 0.22 * 0.7879100979974435
+    valor_tarifa_branca_real = 0.22 * 0.6614614401363442
+    valor_disponibilidade = 100 * 0.7879100979974435
+
+    assert values["valor_conta_consumo_regular_daily_r"] == pytest.approx(
+        valor_regular_real
+    )
+    assert values["valor_conta_com_geracao_daily_r"] == pytest.approx(
+        valor_regular_real
+    )
+    assert values["valor_conta_tarifa_branca_daily_r"] == pytest.approx(
+        valor_tarifa_branca_real
+    )
+    assert values["valor_conta_consumo_regular_monthly_r"] == pytest.approx(
+        valor_disponibilidade
+    )
+    assert values["valor_conta_com_geracao_monthly_r"] == pytest.approx(
+        valor_disponibilidade
+    )
+    assert values["valor_conta_tarifa_branca_monthly_r"] == pytest.approx(
+        valor_disponibilidade
+    )
+    assert values[
+        "valor_conta_consumo_regular_sem_disponibilidade_monthly_r"
+    ] == pytest.approx(valor_regular_real)
+    assert values[
+        "valor_conta_com_geracao_sem_disponibilidade_monthly_r"
+    ] == pytest.approx(valor_regular_real)
+    assert values[
+        "valor_conta_tarifa_branca_sem_disponibilidade_monthly_r"
+    ] == pytest.approx(valor_tarifa_branca_real)
+    assert "valor_conta_com_geracao_sem_disponibilidade_daily_r" not in values
+
+
 def test_dynamic_icms_refresh_uses_monthly_consumption_base():
     coordinator = _build_coordinator()
     values = {

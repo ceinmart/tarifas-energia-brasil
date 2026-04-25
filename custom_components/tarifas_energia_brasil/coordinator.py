@@ -954,6 +954,9 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                 f"valor_conta_tarifa_branca_{period}_r",
                 f"valor_conta_com_geracao_{period}_r",
                 f"valor_fio_b_compensada_{period}_r",
+                f"valor_conta_consumo_regular_sem_disponibilidade_{period}_r",
+                f"valor_conta_tarifa_branca_sem_disponibilidade_{period}_r",
+                f"valor_conta_com_geracao_sem_disponibilidade_{period}_r",
             )
             for dynamic_key in dynamic_keys:
                 values.pop(dynamic_key, None)
@@ -962,16 +965,35 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                 continue
 
             consumo_kwh_periodo = consumo_periodos[period]
-            values[f"valor_conta_consumo_regular_{period}_r"] = calcular_valor_conta_regular(
+            valor_regular_sem_disponibilidade = calcular_valor_conta_regular(
                 kwh_periodo=consumo_kwh_periodo,
                 tarifa_convencional_final_r_kwh=tarifa_conv_final,
                 adicional_bandeira_r_kwh=adicional_bandeira,
             )
-            values[f"valor_conta_tarifa_branca_{period}_r"] = calcular_valor_conta_tarifa_branca(
+            values[f"valor_conta_consumo_regular_{period}_r"] = (
+                max(valor_disponibilidade, valor_regular_sem_disponibilidade)
+                if period == BREAKDOWN_MONTHLY
+                else valor_regular_sem_disponibilidade
+            )
+            if period == BREAKDOWN_MONTHLY:
+                values[
+                    f"valor_conta_consumo_regular_sem_disponibilidade_{period}_r"
+                ] = valor_regular_sem_disponibilidade
+
+            valor_tarifa_branca_sem_disponibilidade = calcular_valor_conta_tarifa_branca(
                 consumo_por_posto_kwh=consumo_tarifa_branca[period],
                 tarifa_final_por_posto_r_kwh=tarifa_final_por_posto,
                 adicional_bandeira_r_kwh=adicional_bandeira,
             )
+            values[f"valor_conta_tarifa_branca_{period}_r"] = (
+                max(valor_disponibilidade, valor_tarifa_branca_sem_disponibilidade)
+                if period == BREAKDOWN_MONTHLY
+                else valor_tarifa_branca_sem_disponibilidade
+            )
+            if period == BREAKDOWN_MONTHLY:
+                values[
+                    f"valor_conta_tarifa_branca_sem_disponibilidade_{period}_r"
+                ] = valor_tarifa_branca_sem_disponibilidade
 
             if has_generation or has_injection:
                 credito_entrada = saldo_creditos_disponiveis if period == BREAKDOWN_MONTHLY else 0.0
@@ -984,12 +1006,17 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                     credito_entrada_kwh=credito_entrada,
                     tarifa_convencional_final_r_kwh=tarifa_conv_final,
                     fio_b_final_r_kwh=fio_b_final,
-                    valor_disponibilidade=valor_disponibilidade,
+                    valor_disponibilidade=(
+                        valor_disponibilidade if period == BREAKDOWN_MONTHLY else 0.0
+                    ),
                 )
                 values[f"valor_conta_com_geracao_{period}_r"] = scee["valor_consumo_faturado"]
                 values[f"valor_fio_b_compensada_{period}_r"] = scee["valor_fio_b_compensada"]
 
                 if period == BREAKDOWN_MONTHLY:
+                    values[
+                        f"valor_conta_com_geracao_sem_disponibilidade_{period}_r"
+                    ] = scee["valor_consumo_scee"]
                     self._credito_consumido_estimado_atual_kwh = scee["credito_consumido_kwh"]
                     self._credito_estimado_atual_kwh = scee["credito_gerado_kwh"]
                     values["previsao_creditos_gerados_kwh"] = max(

@@ -6,8 +6,8 @@ Projeto/pasta: ha.ext.tarifas
 
 from __future__ import annotations
 
+import codecs
 import csv
-import io
 import json
 import logging
 import unicodedata
@@ -28,6 +28,10 @@ from .const import (
 from .models import CollectionMetadata
 
 _LOGGER = logging.getLogger(__name__)
+
+ANEEL_JSON_TIMEOUT_SECONDS = 120
+ANEEL_CSV_TIMEOUT_SECONDS = 600
+CSV_STREAM_CHUNK_SIZE = 64 * 1024
 
 
 class AneelClientError(Exception):
@@ -283,28 +287,65 @@ class AneelClient:
         if not url:
             raise AneelClientError(f"URL do recurso nao encontrada para {resource_id}.")
 
-        async with self._session.get(url, timeout=90) as response:
+        async with self._session.get(url, timeout=ANEEL_CSV_TIMEOUT_SECONDS) as response:
             response.raise_for_status()
-            content = await response.read()
-
-        text = content.decode("utf-8", errors="ignore")
-        records: list[dict[str, Any]] = []
-        reader = csv.DictReader(io.StringIO(text))
-        for row in reader:
-            if self._row_matches_filters(row, filters):
-                records.append(dict(row))
+            records = await self._filtered_csv_records_from_response(response, filters)
         return records
 
     async def _request_json(self, action: str, params: dict[str, Any]) -> dict[str, Any]:
         """Executa request JSON para endpoint CKAN."""
 
         url = f"{self.CKAN_BASE_URL}/{action}"
-        async with self._session.get(url, params=params, timeout=60) as response:
+        async with self._session.get(
+            url,
+            params=params,
+            timeout=ANEEL_JSON_TIMEOUT_SECONDS,
+        ) as response:
             response.raise_for_status()
             payload = await response.json(content_type=None)
         if not payload.get("success", False):
             raise AneelClientError(f"Resposta CKAN sem sucesso para {action}.")
         return payload
+
+    async def _filtered_csv_records_from_response(
+        self,
+        response: Any,
+        filters: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        """Filtra CSV em streaming mantendo apenas registros relevantes em memoria."""
+
+        records: list[dict[str, Any]] = []
+        header: list[str] | None = None
+        async for row in self._iter_csv_rows_from_response(response):
+            if header is None:
+                header = [str(cell) for cell in row]
+                continue
+            if not row or all(not str(cell).strip() for cell in row):
+                continue
+            row_dict = {
+                header[index]: row[index] if index < len(row) else ""
+                for index in range(len(header))
+            }
+            if self._row_matches_filters(row_dict, filters):
+                records.append(row_dict)
+        return records
+
+    async def _iter_csv_rows_from_response(self, response: Any):
+        """Itera linhas CSV vindas da resposta HTTP sem materializar o arquivo inteiro."""
+
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="ignore")
+        buffer = ""
+        async for chunk in response.content.iter_chunked(CSV_STREAM_CHUNK_SIZE):
+            buffer += decoder.decode(chunk)
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                for parsed in csv.reader([f"{line}\n"]):
+                    yield parsed
+
+        buffer += decoder.decode(b"", final=True)
+        if buffer:
+            for parsed in csv.reader([buffer]):
+                yield parsed
 
     def _parse_tarifa_records(
         self,

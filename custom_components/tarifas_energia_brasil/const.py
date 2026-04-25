@@ -13,7 +13,7 @@ from homeassistant.const import Platform
 
 DOMAIN = "tarifas_energia_brasil"
 NAME = "Tarifas Energia Brasil"
-VERSION = "0.1.0-alpha.7"
+VERSION = "0.1.0-alpha.8"
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 

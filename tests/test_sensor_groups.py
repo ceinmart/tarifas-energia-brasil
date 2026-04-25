@@ -219,6 +219,8 @@ def test_regular_group_is_always_present():
 
     assert "tarifa_convencional_final_r_kwh" in keys
     assert "valor_conta_consumo_regular_daily_r" in keys
+    assert "valor_conta_consumo_regular_sem_disponibilidade_monthly_r" in keys
+    assert "valor_conta_consumo_regular_sem_disponibilidade_daily_r" not in keys
     assert "valor_conta_tarifa_branca_daily_r" not in keys
     assert "valor_conta_com_geracao_daily_r" not in keys
 
@@ -239,6 +241,8 @@ def test_generation_group_depends_on_entity_and_toggle():
 
     assert "fio_b_final_r_kwh" in keys
     assert "valor_conta_com_geracao_monthly_r" in keys
+    assert "valor_conta_com_geracao_sem_disponibilidade_monthly_r" in keys
+    assert "valor_conta_com_geracao_sem_disponibilidade_daily_r" not in keys
     assert "valor_fio_b_compensada_monthly_r" in keys
 
 
@@ -256,6 +260,8 @@ def test_tarifa_branca_group_respects_toggle():
 
     assert "tarifa_branca_ponta_final_r_kwh" in keys
     assert "valor_conta_tarifa_branca_monthly_r" in keys
+    assert "valor_conta_tarifa_branca_sem_disponibilidade_monthly_r" in keys
+    assert "valor_conta_tarifa_branca_sem_disponibilidade_daily_r" not in keys
 
 
 def test_legacy_entry_keeps_tarifa_branca_visible_until_user_opts_out():
