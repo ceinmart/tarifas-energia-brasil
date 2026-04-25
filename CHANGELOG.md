@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.5 - 2026-04-24
+
+### Corrigido
+
+- Reset/rebase de entidades acumuladas agora reinicializa a referencia incremental sem copiar a leitura total atual para todos os acumuladores de dia, semana, mes e Tarifa Branca.
+- Auto-consumo com geracao/SCEE agora usa a diferenca entre energia gerada e energia injetada, evitando limitar o valor pelo consumo do periodo.
+
+### Documentacao
+
+- Adicionada documentacao tecnica gerada a partir do codigo para o pre-release `0.1.0-alpha.5`, com fluxo de funcionamento, objetos principais, funcoes de calculo e criterios de teste.
+
+### Testes
+
+- Cobertura adicionada para reset sem contaminacao dos acumuladores, Tarifa Branca apos rebase e calculo de auto-consumo por energia gerada menos energia injetada.
+
 ## 0.1.0-alpha.4 - 2026-04-24
 
 ### Corrigido

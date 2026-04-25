@@ -227,6 +227,15 @@ def calcular_valor_faturado_com_disponibilidade(
     return max(valor_disponibilidade, valor_calculado)
 
 
+def calcular_auto_consumo_kwh(
+    gerado_kwh: float,
+    injetado_kwh: float,
+) -> float:
+    """Calcula auto-consumo como energia gerada menos energia injetada."""
+
+    return max(max(gerado_kwh, 0.0) - max(injetado_kwh, 0.0), 0.0)
+
+
 def calcular_scee_simplificado(
     consumo_kwh: float,
     geracao_kwh: float,

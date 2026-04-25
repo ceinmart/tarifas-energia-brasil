@@ -106,6 +106,13 @@ def test_bandeira_tarifaria():
     assert value == pytest.approx(4.147)
 
 
+def test_auto_consumo_usa_diferenca_entre_gerado_e_injetado():
+    assert calc.calcular_auto_consumo_kwh(
+        gerado_kwh=120,
+        injetado_kwh=35,
+    ) == pytest.approx(85)
+
+
 def test_scee_simplificado():
     result = calc.calcular_scee_simplificado(
         consumo_kwh=200,

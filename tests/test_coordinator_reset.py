@@ -191,6 +191,8 @@ coordinator_module = _load_module(f"{_PKG_NAME}.coordinator", _BASE_DIR / "coord
 
 TarifasEnergiaBrasilCoordinator = coordinator_module.TarifasEnergiaBrasilCoordinator
 BREAKDOWN_MONTHLY = const_module.BREAKDOWN_MONTHLY
+BREAKDOWN_DAILY = const_module.BREAKDOWN_DAILY
+BREAKDOWN_WEEKLY = const_module.BREAKDOWN_WEEKLY
 CONF_CONCESSIONARIA = const_module.CONF_CONCESSIONARIA
 resolve_tarifa_branca_schedule = tarifa_branca_module.resolve_tarifa_branca_schedule
 
@@ -203,7 +205,7 @@ def _build_coordinator() -> object:
     return coordinator
 
 
-def test_prepare_delta_context_uses_current_total_when_sensor_resets():
+def test_prepare_delta_context_reinitializes_reference_when_sensor_resets():
     coordinator = _build_coordinator()
     now = datetime(2026, 4, 23, 15, 0, tzinfo=UTC)
     context = coordinator._prepare_delta_context(
@@ -215,16 +217,22 @@ def test_prepare_delta_context_uses_current_total_when_sensor_resets():
 
     assert context["reset_detected"] is True
     assert context["raw_delta_kwh"] == pytest.approx(-988.67)
-    assert context["delta_kwh"] == pytest.approx(291.83)
+    assert context["delta_kwh"] == pytest.approx(0.0)
 
 
-def test_scalar_period_state_keeps_current_cycle_value_after_reset():
+def test_scalar_period_state_does_not_copy_reset_total_to_every_breakdown():
     coordinator = _build_coordinator()
     now = datetime(2026, 4, 23, 15, 0, tzinfo=UTC)
     period_state = TarifasEnergiaBrasilCoordinator._new_period_state()
+    period_state[BREAKDOWN_DAILY]["key"] = "2026-04-23"
+    period_state[BREAKDOWN_DAILY]["kwh"] = 12.0
+    period_state[BREAKDOWN_WEEKLY]["key"] = "2026-W17"
+    period_state[BREAKDOWN_WEEKLY]["kwh"] = 80.0
+    period_state[BREAKDOWN_MONTHLY]["key"] = "2026-04-D01"
+    period_state[BREAKDOWN_MONTHLY]["kwh"] = 291.83
     delta_context = {
         "has_previous": True,
-        "delta_kwh": 291.83,
+        "delta_kwh": 0.0,
         "raw_delta_kwh": -988.67,
         "reset_detected": True,
         "start": now,
@@ -238,19 +246,23 @@ def test_scalar_period_state_keeps_current_cycle_value_after_reset():
         delta_context=delta_context,
     )
 
+    assert values[BREAKDOWN_DAILY] == pytest.approx(12.0)
+    assert values[BREAKDOWN_WEEKLY] == pytest.approx(80.0)
     assert values[BREAKDOWN_MONTHLY] == pytest.approx(291.83)
 
 
-def test_tarifa_branca_state_assigns_reset_value_to_current_posto():
+def test_tarifa_branca_state_does_not_copy_reset_total_to_current_posto():
     coordinator = _build_coordinator()
     now = datetime(2026, 4, 23, 15, 0, tzinfo=UTC)
     period_state = TarifasEnergiaBrasilCoordinator._new_posto_period_state()
+    period_state[BREAKDOWN_MONTHLY]["key"] = "2026-04-D01"
+    period_state[BREAKDOWN_MONTHLY]["postos"]["fora_ponta"] = 120.0
     schedule, _metadata = resolve_tarifa_branca_schedule(
         {CONF_CONCESSIONARIA: "CPFL-PIRATINING"}
     )
     delta_context = {
         "has_previous": True,
-        "delta_kwh": 291.83,
+        "delta_kwh": 0.0,
         "raw_delta_kwh": -988.67,
         "reset_detected": True,
         "start": now,
@@ -266,7 +278,45 @@ def test_tarifa_branca_state_assigns_reset_value_to_current_posto():
         holidays=set(),
     )
 
-    assert values[BREAKDOWN_MONTHLY]["fora_ponta"] == pytest.approx(291.83)
+    assert values[BREAKDOWN_MONTHLY]["fora_ponta"] == pytest.approx(120.0)
     assert values[BREAKDOWN_MONTHLY]["intermediario"] == pytest.approx(0.0)
     assert values[BREAKDOWN_MONTHLY]["ponta"] == pytest.approx(0.0)
-    assert coordinator._tarifa_branca_low_confidence is True
+    assert coordinator._tarifa_branca_low_confidence is False
+
+
+def test_dynamic_values_calculate_auto_consumo_from_generated_minus_injected():
+    coordinator = _build_coordinator()
+    coordinator._creditos_ledger = [coordinator_module.CreditoEntry("2026-03", 80.0)]
+
+    values = {
+        "tarifa_convencional_final_r_kwh": 0.9,
+        "adicional_bandeira_r_kwh": 0.0,
+        "fio_b_final_r_kwh": 0.1,
+    }
+    consumo_periodos = {
+        BREAKDOWN_DAILY: 0.0,
+        BREAKDOWN_WEEKLY: 0.0,
+        BREAKDOWN_MONTHLY: 100.0,
+    }
+    geracao_periodos = {
+        BREAKDOWN_DAILY: 0.0,
+        BREAKDOWN_WEEKLY: 0.0,
+        BREAKDOWN_MONTHLY: 40.0,
+    }
+    consumo_tarifa_branca = {
+        period: {"fora_ponta": 0.0, "intermediario": 0.0, "ponta": 0.0}
+        for period in (BREAKDOWN_DAILY, BREAKDOWN_WEEKLY, BREAKDOWN_MONTHLY)
+    }
+
+    coordinator._apply_dynamic_values_to_snapshot(
+        values=values,
+        enabled_breakdowns=[BREAKDOWN_MONTHLY],
+        consumo_periodos=consumo_periodos,
+        geracao_periodos=geracao_periodos,
+        consumo_tarifa_branca=consumo_tarifa_branca,
+        has_generation=True,
+        tipo_fornecimento="monofasico",
+    )
+
+    assert values["auto_consumo_kwh"] == pytest.approx(20.0)
+    assert values["auto_consumo_reais"] == pytest.approx(18.0)

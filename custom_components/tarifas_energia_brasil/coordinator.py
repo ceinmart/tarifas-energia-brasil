@@ -20,6 +20,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .aneel_client import AneelClient, AneelClientError
 from .calculators import (
+    calcular_auto_consumo_kwh,
     calcular_fio_b_final,
     calcular_scee_creditos_prioritarios,
     calcular_tarifa_branca_por_posto,
@@ -447,7 +448,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         reset_detected = delta < 0
         return {
             "has_previous": True,
-            "delta_kwh": max(current_total_kwh if reset_detected else delta, 0.0),
+            "delta_kwh": 0.0 if reset_detected else max(delta, 0.0),
             "raw_delta_kwh": delta,
             "reset_detected": reset_detected,
             "start": last_timestamp,
@@ -515,10 +516,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             rollovers = self._ensure_scalar_current_keys(period_state, now, reading_day)
             return self._current_period_values(period_state), rollovers
         if delta_context.get("reset_detected"):
-            reset_kwh = float(delta_context.get("delta_kwh", 0.0) or 0.0)
-            for period in VALID_BREAKDOWNS:
-                period_state[period]["key"] = self._period_key(period, now, reading_day)
-                period_state[period]["kwh"] = reset_kwh
+            rollovers = self._ensure_scalar_current_keys(period_state, now, reading_day)
             return self._current_period_values(period_state), rollovers
 
         start = delta_context["start"]
@@ -561,18 +559,10 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             rollovers = self._ensure_posto_current_keys(period_state, now, reading_day)
             return self._current_posto_period_values(period_state), rollovers
         if delta_context.get("reset_detected"):
-            reset_kwh = float(delta_context.get("delta_kwh", 0.0) or 0.0)
-            current_posto = resolve_tarifa_branca_posto(now, schedule, holidays)
             self._tarifa_branca_last_interval_seconds = 0.0
-            self._tarifa_branca_last_segment_count = 1 if reset_kwh > 0 else 0
-            self._tarifa_branca_low_confidence = reset_kwh > 0
-            for period in VALID_BREAKDOWNS:
-                period_state[period]["key"] = self._period_key(period, now, reading_day)
-                period_state[period]["postos"] = {
-                    posto: 0.0 for posto in POSTOS_TARIFA_BRANCA
-                }
-                if reset_kwh > 0:
-                    period_state[period]["postos"][current_posto] = reset_kwh
+            self._tarifa_branca_last_segment_count = 0
+            self._tarifa_branca_low_confidence = False
+            rollovers = self._ensure_posto_current_keys(period_state, now, reading_day)
             return self._current_posto_period_values(period_state), rollovers
 
         start = delta_context["start"]
@@ -835,9 +825,9 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                         + scee["credito_gerado_kwh"],
                         0.0,
                     )
-                    values["auto_consumo_kwh"] = min(
-                        consumo_kwh_periodo,
-                        geracao_periodos[period],
+                    values["auto_consumo_kwh"] = calcular_auto_consumo_kwh(
+                        gerado_kwh=geracao_periodos[period],
+                        injetado_kwh=scee["credito_gerado_kwh"],
                     )
                     values["auto_consumo_reais"] = (
                         float(values["auto_consumo_kwh"]) * tarifa_conv_final
