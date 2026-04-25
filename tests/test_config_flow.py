@@ -188,6 +188,7 @@ CONF_CONSUMPTION_ENTITY = const_module.CONF_CONSUMPTION_ENTITY
 CONF_ENABLE_GENERATION_GROUP = const_module.CONF_ENABLE_GENERATION_GROUP
 CONF_ENABLE_TARIFA_BRANCA_GROUP = const_module.CONF_ENABLE_TARIFA_BRANCA_GROUP
 CONF_GENERATION_ENTITY = const_module.CONF_GENERATION_ENTITY
+CONF_INJECTION_ENTITY = const_module.CONF_INJECTION_ENTITY
 CONF_READING_DAY = const_module.CONF_READING_DAY
 CONF_SUPPLY_TYPE = const_module.CONF_SUPPLY_TYPE
 CONF_UPDATE_HOURS = const_module.CONF_UPDATE_HOURS
@@ -207,6 +208,18 @@ def test_config_flow_requires_supply_type_when_generation_set():
         CONF_CONCESSIONARIA: "CPFL-PIRATINING",
         CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
         CONF_GENERATION_ENTITY: "sensor.geracao_total",
+    }
+    result = asyncio.run(flow.async_step_user(user_input))
+    assert result["type"] == "form"
+    assert result["errors"].get("base") == "supply_type_required"
+
+
+def test_config_flow_requires_supply_type_when_injection_set():
+    flow = TarifasEnergiaBrasilConfigFlow()
+    user_input = {
+        CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+        CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
+        CONF_INJECTION_ENTITY: "sensor.energia_injetada",
     }
     result = asyncio.run(flow.async_step_user(user_input))
     assert result["type"] == "form"
@@ -272,6 +285,20 @@ def test_options_flow_forces_generation_group_off_without_generation_entity():
     result = asyncio.run(flow.async_step_init(user_input))
     assert result["type"] == "create_entry"
     assert result["data"][CONF_ENABLE_GENERATION_GROUP] is False
+
+
+def test_options_flow_enables_generation_group_with_injection_entity():
+    entry = sys.modules["homeassistant.config_entries"].ConfigEntry(data={}, options={})
+    flow = TarifasEnergiaBrasilOptionsFlow(entry)
+    user_input = {
+        CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+        CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
+        CONF_INJECTION_ENTITY: "sensor.energia_injetada",
+        CONF_SUPPLY_TYPE: "trifasico",
+    }
+    result = asyncio.run(flow.async_step_init(user_input))
+    assert result["type"] == "create_entry"
+    assert result["data"][CONF_ENABLE_GENERATION_GROUP] is True
 
 
 def test_options_flow_injects_legacy_defaults():

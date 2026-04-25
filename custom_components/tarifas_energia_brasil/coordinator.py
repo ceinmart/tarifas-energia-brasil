@@ -39,6 +39,7 @@ from .const import (
     CONF_CONCESSIONARIA,
     CONF_CONSUMPTION_ENTITY,
     CONF_GENERATION_ENTITY,
+    CONF_INJECTION_ENTITY,
     CONF_READING_DAY,
     CONF_SUPPLY_TYPE,
     CONF_TB_EXTRA_HOLIDAYS,
@@ -96,10 +97,13 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
 
         self._last_consumo_total_kwh: float | None = None
         self._last_geracao_total_kwh: float | None = None
+        self._last_injecao_total_kwh: float | None = None
         self._last_consumo_timestamp: datetime | None = None
         self._last_geracao_timestamp: datetime | None = None
+        self._last_injecao_timestamp: datetime | None = None
         self._consumo_period_state = self._new_period_state()
         self._geracao_period_state = self._new_period_state()
+        self._injecao_period_state = self._new_period_state()
         self._consumo_tarifa_branca_state = self._new_posto_period_state()
 
         self._creditos_ledger: list[CreditoEntry] = []
@@ -108,6 +112,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         self._ultimo_ciclo_mensal: str | None = None
         self._consumo_reset_detectado = 0
         self._geracao_reset_detectado = 0
+        self._injecao_reset_detectado = 0
         self._tarifa_branca_last_interval_seconds = 0.0
         self._tarifa_branca_last_segment_count = 0
         self._tarifa_branca_low_confidence = False
@@ -164,20 +169,29 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             self._last_geracao_total_kwh = self._as_float_or_none(
                 payload.get("last_geracao_total_kwh")
             )
+            self._last_injecao_total_kwh = self._as_float_or_none(
+                payload.get("last_injecao_total_kwh")
+            )
             self._last_consumo_timestamp = self._as_datetime_or_none(
                 payload.get("last_consumo_timestamp")
             )
             self._last_geracao_timestamp = self._as_datetime_or_none(
                 payload.get("last_geracao_timestamp")
             )
+            self._last_injecao_timestamp = self._as_datetime_or_none(
+                payload.get("last_injecao_timestamp")
+            )
 
             loaded_consumo = payload.get("consumo_period_state")
             loaded_geracao = payload.get("geracao_period_state")
+            loaded_injecao = payload.get("injecao_period_state")
             loaded_consumo_tarifa_branca = payload.get("consumo_tarifa_branca_state")
             if isinstance(loaded_consumo, dict):
                 self._consumo_period_state = self._merge_period_state(loaded_consumo)
             if isinstance(loaded_geracao, dict):
                 self._geracao_period_state = self._merge_period_state(loaded_geracao)
+            if isinstance(loaded_injecao, dict):
+                self._injecao_period_state = self._merge_period_state(loaded_injecao)
             if isinstance(loaded_consumo_tarifa_branca, dict):
                 self._consumo_tarifa_branca_state = self._merge_posto_period_state(
                     loaded_consumo_tarifa_branca
@@ -213,6 +227,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         return {
             "last_consumo_total_kwh": self._last_consumo_total_kwh,
             "last_geracao_total_kwh": self._last_geracao_total_kwh,
+            "last_injecao_total_kwh": self._last_injecao_total_kwh,
             "last_consumo_timestamp": (
                 self._last_consumo_timestamp.isoformat()
                 if self._last_consumo_timestamp is not None
@@ -223,8 +238,14 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                 if self._last_geracao_timestamp is not None
                 else None
             ),
+            "last_injecao_timestamp": (
+                self._last_injecao_timestamp.isoformat()
+                if self._last_injecao_timestamp is not None
+                else None
+            ),
             "consumo_period_state": self._consumo_period_state,
             "geracao_period_state": self._geracao_period_state,
+            "injecao_period_state": self._injecao_period_state,
             "consumo_tarifa_branca_state": self._consumo_tarifa_branca_state,
             "ultimo_ciclo_mensal": self._ultimo_ciclo_mensal,
             "credito_estimado_atual_kwh": self._credito_estimado_atual_kwh,
@@ -310,6 +331,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         for entity_id in (
             self._effective_value(CONF_CONSUMPTION_ENTITY),
             self._effective_value(CONF_GENERATION_ENTITY),
+            self._effective_value(CONF_INJECTION_ENTITY),
         ):
             if isinstance(entity_id, str) and entity_id and entity_id not in tracked:
                 tracked.append(entity_id)
@@ -356,6 +378,9 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             geracao_total_kwh=self._read_entity_kwh(
                 self._effective_value(CONF_GENERATION_ENTITY)
             ),
+            injecao_total_kwh=self._read_entity_kwh(
+                self._effective_value(CONF_INJECTION_ENTITY)
+            ),
             reading_day=int(self._effective_value(CONF_READING_DAY, DEFAULT_READING_DAY)),
             tariff_context=self._cached_rollover_context(),
         )
@@ -364,10 +389,14 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             enabled_breakdowns=self._effective_breakdowns(),
             consumo_periodos=self._current_period_values(self._consumo_period_state),
             geracao_periodos=self._current_period_values(self._geracao_period_state),
+            injecao_periodos=self._current_period_values(self._injecao_period_state),
             consumo_tarifa_branca=self._current_posto_period_values(
                 self._consumo_tarifa_branca_state
             ),
             has_generation=bool(self._effective_value(CONF_GENERATION_ENTITY)),
+            has_injection=bool(self._effective_value(CONF_INJECTION_ENTITY)),
+            geracao_total_kwh=self._last_geracao_total_kwh,
+            injecao_total_kwh=self._last_injecao_total_kwh,
             tipo_fornecimento=str(
                 self._effective_value(CONF_SUPPLY_TYPE, SUPPLY_MONOPHASE)
             ),
@@ -628,12 +657,13 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         self,
         consumo_rollovers: dict[str, list[tuple[str, float]]],
         geracao_rollovers: dict[str, list[tuple[str, float]]],
+        injecao_rollovers: dict[str, list[tuple[str, float]]],
         tariff_context: dict[str, float],
     ) -> None:
         """Fecha ciclos mensais anteriores e atualiza o ledger de creditos."""
 
         consumo_monthly = dict(consumo_rollovers.get(BREAKDOWN_MONTHLY, []))
-        geracao_monthly = dict(geracao_rollovers.get(BREAKDOWN_MONTHLY, []))
+        geracao_monthly = dict(injecao_rollovers.get(BREAKDOWN_MONTHLY, []))
         cycle_keys = sorted(set(consumo_monthly) | set(geracao_monthly))
         if not cycle_keys:
             return
@@ -671,10 +701,16 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         now: datetime,
         consumo_total_kwh: float,
         geracao_total_kwh: float,
+        injecao_total_kwh: float,
         reading_day: int,
         tariff_context: dict[str, float],
-    ) -> tuple[dict[str, float], dict[str, float], dict[str, dict[str, float]]]:
-        """Atualiza estados incrementais de consumo/geracao e Tarifa Branca."""
+    ) -> tuple[
+        dict[str, float],
+        dict[str, float],
+        dict[str, float],
+        dict[str, dict[str, float]],
+    ]:
+        """Atualiza estados incrementais de consumo/geracao/injecao e Tarifa Branca."""
 
         schedule, holidays, _metadata = self._resolve_tarifa_branca_context(
             now,
@@ -694,6 +730,12 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             self._last_geracao_total_kwh,
             self._last_geracao_timestamp,
         )
+        injecao_delta = self._prepare_delta_context(
+            injecao_total_kwh,
+            now,
+            self._last_injecao_total_kwh,
+            self._last_injecao_timestamp,
+        )
 
         consumo_periodos, consumo_rollovers = self._apply_scalar_delta_context(
             self._consumo_period_state,
@@ -706,6 +748,12 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             now,
             reading_day,
             geracao_delta,
+        )
+        injecao_periodos, injecao_rollovers = self._apply_scalar_delta_context(
+            self._injecao_period_state,
+            now,
+            reading_day,
+            injecao_delta,
         )
         consumo_tarifa_branca, _tarifa_rollovers = self._apply_tarifa_branca_delta_context(
             self._consumo_tarifa_branca_state,
@@ -720,19 +768,28 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             self._consumo_reset_detectado += 1
         if geracao_delta.get("reset_detected"):
             self._geracao_reset_detectado += 1
+        if injecao_delta.get("reset_detected"):
+            self._injecao_reset_detectado += 1
 
         self._finalize_monthly_rollovers(
             consumo_rollovers=consumo_rollovers,
             geracao_rollovers=geracao_rollovers,
+            injecao_rollovers=(
+                injecao_rollovers
+                if self._effective_value(CONF_INJECTION_ENTITY)
+                else geracao_rollovers
+            ),
             tariff_context=tariff_context,
         )
 
         self._last_consumo_total_kwh = consumo_total_kwh
         self._last_geracao_total_kwh = geracao_total_kwh
+        self._last_injecao_total_kwh = injecao_total_kwh
         self._last_consumo_timestamp = now
         self._last_geracao_timestamp = now
+        self._last_injecao_timestamp = now
         self._ultimo_ciclo_mensal = str(self._consumo_period_state[BREAKDOWN_MONTHLY]["key"])
-        return consumo_periodos, geracao_periodos, consumo_tarifa_branca
+        return consumo_periodos, geracao_periodos, injecao_periodos, consumo_tarifa_branca
 
     def _apply_dynamic_values_to_snapshot(
         self,
@@ -740,8 +797,12 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         enabled_breakdowns: list[str],
         consumo_periodos: dict[str, float],
         geracao_periodos: dict[str, float],
+        injecao_periodos: dict[str, float],
         consumo_tarifa_branca: dict[str, dict[str, float]],
         has_generation: bool,
+        has_injection: bool,
+        geracao_total_kwh: float | None,
+        injecao_total_kwh: float | None,
         tipo_fornecimento: str,
     ) -> None:
         """Atualiza campos derivados do snapshot a partir dos acumuladores correntes."""
@@ -803,11 +864,14 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                 adicional_bandeira_r_kwh=adicional_bandeira,
             )
 
-            if has_generation:
+            if has_generation or has_injection:
                 credito_entrada = saldo_creditos_disponiveis if period == BREAKDOWN_MONTHLY else 0.0
+                injecao_kwh_periodo = (
+                    injecao_periodos[period] if has_injection else geracao_periodos[period]
+                )
                 scee = calcular_scee_creditos_prioritarios(
                     consumo_kwh=consumo_kwh_periodo,
-                    geracao_kwh=geracao_periodos[period],
+                    geracao_kwh=injecao_kwh_periodo,
                     credito_entrada_kwh=credito_entrada,
                     tarifa_convencional_final_r_kwh=tarifa_conv_final,
                     fio_b_final_r_kwh=fio_b_final,
@@ -825,10 +889,16 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                         + scee["credito_gerado_kwh"],
                         0.0,
                     )
-                    values["auto_consumo_kwh"] = calcular_auto_consumo_kwh(
-                        gerado_kwh=geracao_periodos[period],
-                        injetado_kwh=scee["credito_gerado_kwh"],
-                    )
+                    if has_injection:
+                        values["auto_consumo_kwh"] = calcular_auto_consumo_kwh(
+                            gerado_kwh=float(geracao_total_kwh or 0.0),
+                            injetado_kwh=float(injecao_total_kwh or 0.0),
+                        )
+                    else:
+                        values["auto_consumo_kwh"] = calcular_auto_consumo_kwh(
+                            gerado_kwh=geracao_periodos[period],
+                            injetado_kwh=scee["credito_gerado_kwh"],
+                        )
                     values["auto_consumo_reais"] = (
                         float(values["auto_consumo_kwh"]) * tarifa_conv_final
                     )
@@ -847,11 +917,15 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             {
                 "consumo_reset_detectado": self._consumo_reset_detectado,
                 "geracao_reset_detectado": self._geracao_reset_detectado,
+                "injecao_reset_detectado": self._injecao_reset_detectado,
                 "consumo_mensal_kwh_apurado": float(
                     self._consumo_period_state[BREAKDOWN_MONTHLY]["kwh"]
                 ),
                 "geracao_mensal_kwh_apurado": float(
                     self._geracao_period_state[BREAKDOWN_MONTHLY]["kwh"]
+                ),
+                "injecao_mensal_kwh_apurado": float(
+                    self._injecao_period_state[BREAKDOWN_MONTHLY]["kwh"]
                 ),
                 "estimativa_tarifa_branca_sem_posto_real": self._tarifa_branca_low_confidence,
                 "tarifa_branca_schedule_source": self._tarifa_branca_schedule_source,
@@ -887,6 +961,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
 
         consumo_entity = self._effective_value(CONF_CONSUMPTION_ENTITY)
         geracao_entity = self._effective_value(CONF_GENERATION_ENTITY)
+        injecao_entity = self._effective_value(CONF_INJECTION_ENTITY)
         tipo_fornecimento = self._effective_value(CONF_SUPPLY_TYPE, SUPPLY_MONOPHASE)
         had_consumo_history = self._last_consumo_timestamp is not None
 
@@ -949,13 +1024,20 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
 
         consumo_total_kwh = self._read_entity_kwh(consumo_entity)
         geracao_total_kwh = self._read_entity_kwh(geracao_entity)
+        injecao_total_kwh = self._read_entity_kwh(injecao_entity)
 
         enabled_breakdowns = self._effective_breakdowns()
         reading_day = int(self._effective_value(CONF_READING_DAY, DEFAULT_READING_DAY))
-        consumo_periodos, geracao_periodos, consumo_tarifa_branca = self._process_energy_states(
+        (
+            consumo_periodos,
+            geracao_periodos,
+            injecao_periodos,
+            consumo_tarifa_branca,
+        ) = self._process_energy_states(
             now=now,
             consumo_total_kwh=consumo_total_kwh,
             geracao_total_kwh=geracao_total_kwh,
+            injecao_total_kwh=injecao_total_kwh,
             reading_day=reading_day,
             tariff_context=self._cached_rollover_context(),
         )
@@ -1066,8 +1148,12 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             enabled_breakdowns=enabled_breakdowns,
             consumo_periodos=consumo_periodos,
             geracao_periodos=geracao_periodos,
+            injecao_periodos=injecao_periodos,
             consumo_tarifa_branca=consumo_tarifa_branca,
             has_generation=bool(geracao_entity),
+            has_injection=bool(injecao_entity),
+            geracao_total_kwh=geracao_total_kwh,
+            injecao_total_kwh=injecao_total_kwh,
             tipo_fornecimento=tipo_fornecimento,
         )
 
@@ -1086,6 +1172,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             "prioridade_aneel": prioridade,
             "consumo_entity": consumo_entity,
             "geracao_entity": geracao_entity,
+            "injecao_entity": injecao_entity,
             "consumo_mensal_kwh_apurado": consumo_mensal_kwh,
             "consumo_bootstrap_sem_historico": not had_consumo_history,
             "mensagem_erro": None,

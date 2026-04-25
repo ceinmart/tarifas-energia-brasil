@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.6 - 2026-04-24
+
+### Adicionado
+
+- Nova entidade opcional de energia injetada acumulada (`entidade_injecao_kwh`) no fluxo de configuracao e nas opcoes da integracao.
+- Persistencia e acumuladores independentes para injecao, com diagnosticos de reset e apuracao mensal.
+
+### Corrigido
+
+- Auto-consumo agora usa `geracao acumulada - energia injetada acumulada` quando a entidade de injecao esta configurada, evitando confundir consumo, geracao e credito estimado.
+- Calculos SCEE passam a usar a energia injetada apurada como energia compensavel quando esse sensor existe.
+- Grupo de geracao/SCEE tambem pode ser habilitado quando ha entidade de injecao configurada.
+
+### Documentacao
+
+- README e documentacao tecnica atualizados para o pre-release `0.1.0-alpha.6`.
+
 ## 0.1.0-alpha.5 - 2026-04-24
 
 ### Corrigido

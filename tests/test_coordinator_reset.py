@@ -303,6 +303,11 @@ def test_dynamic_values_calculate_auto_consumo_from_generated_minus_injected():
         BREAKDOWN_WEEKLY: 0.0,
         BREAKDOWN_MONTHLY: 40.0,
     }
+    injecao_periodos = {
+        BREAKDOWN_DAILY: 0.0,
+        BREAKDOWN_WEEKLY: 0.0,
+        BREAKDOWN_MONTHLY: 0.0,
+    }
     consumo_tarifa_branca = {
         period: {"fora_ponta": 0.0, "intermediario": 0.0, "ponta": 0.0}
         for period in (BREAKDOWN_DAILY, BREAKDOWN_WEEKLY, BREAKDOWN_MONTHLY)
@@ -313,10 +318,60 @@ def test_dynamic_values_calculate_auto_consumo_from_generated_minus_injected():
         enabled_breakdowns=[BREAKDOWN_MONTHLY],
         consumo_periodos=consumo_periodos,
         geracao_periodos=geracao_periodos,
+        injecao_periodos=injecao_periodos,
         consumo_tarifa_branca=consumo_tarifa_branca,
         has_generation=True,
+        has_injection=False,
+        geracao_total_kwh=40.0,
+        injecao_total_kwh=None,
         tipo_fornecimento="monofasico",
     )
 
     assert values["auto_consumo_kwh"] == pytest.approx(20.0)
     assert values["auto_consumo_reais"] == pytest.approx(18.0)
+
+
+def test_dynamic_values_calculate_auto_consumo_from_injection_entity_totals():
+    coordinator = _build_coordinator()
+    coordinator._creditos_ledger = []
+
+    values = {
+        "tarifa_convencional_final_r_kwh": 0.9748154981549815,
+        "adicional_bandeira_r_kwh": 0.0,
+        "fio_b_final_r_kwh": 0.14945295021665786,
+    }
+    consumo_periodos = {
+        BREAKDOWN_DAILY: 302.43,
+        BREAKDOWN_WEEKLY: 302.43,
+        BREAKDOWN_MONTHLY: 302.43,
+    }
+    geracao_periodos = {
+        BREAKDOWN_DAILY: 0.0,
+        BREAKDOWN_WEEKLY: 0.0,
+        BREAKDOWN_MONTHLY: 0.0,
+    }
+    injecao_periodos = {
+        BREAKDOWN_DAILY: 0.0,
+        BREAKDOWN_WEEKLY: 0.0,
+        BREAKDOWN_MONTHLY: 0.0,
+    }
+    consumo_tarifa_branca = {
+        period: {"fora_ponta": 0.0, "intermediario": 0.0, "ponta": 0.0}
+        for period in (BREAKDOWN_DAILY, BREAKDOWN_WEEKLY, BREAKDOWN_MONTHLY)
+    }
+
+    coordinator._apply_dynamic_values_to_snapshot(
+        values=values,
+        enabled_breakdowns=[BREAKDOWN_MONTHLY],
+        consumo_periodos=consumo_periodos,
+        geracao_periodos=geracao_periodos,
+        injecao_periodos=injecao_periodos,
+        consumo_tarifa_branca=consumo_tarifa_branca,
+        has_generation=True,
+        has_injection=True,
+        geracao_total_kwh=311.9,
+        injecao_total_kwh=201.82,
+        tipo_fornecimento="trifasico",
+    )
+
+    assert values["auto_consumo_kwh"] == pytest.approx(110.08)

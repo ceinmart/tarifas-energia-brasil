@@ -11,6 +11,7 @@
           "meio_prioritario_aneel": "Meio prioritario de acesso ANEEL",
           "entidade_consumo_kwh": "Entidade de consumo acumulado (kWh)",
           "entidade_geracao_kwh": "Entidade de geracao acumulada (kWh)",
+          "entidade_injecao_kwh": "Entidade de energia injetada acumulada (kWh)",
           "tipo_fornecimento": "Tipo de fornecimento",
           "quebras_calculo": "Quebras de calculo"
         }

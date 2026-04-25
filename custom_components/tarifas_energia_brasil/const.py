@@ -13,7 +13,7 @@ from homeassistant.const import Platform
 
 DOMAIN = "tarifas_energia_brasil"
 NAME = "Tarifas Energia Brasil"
-VERSION = "0.1.0-alpha.5"
+VERSION = "0.1.0-alpha.6"
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
@@ -23,6 +23,7 @@ CONF_UPDATE_HOURS = "frequencia_atualizacao_horas"
 CONF_ANEEL_METHOD = "meio_prioritario_aneel"
 CONF_CONSUMPTION_ENTITY = "entidade_consumo_kwh"
 CONF_GENERATION_ENTITY = "entidade_geracao_kwh"
+CONF_INJECTION_ENTITY = "entidade_injecao_kwh"
 CONF_SUPPLY_TYPE = "tipo_fornecimento"
 CONF_BREAKDOWNS = "quebras_calculo"
 CONF_ENABLE_GENERATION_GROUP = "habilitar_grupo_geracao"
@@ -181,7 +182,7 @@ def is_generation_group_enabled(config: Mapping[str, object]) -> bool:
             config.get(CONF_ENABLE_GENERATION_GROUP),
             DEFAULT_ENABLE_GENERATION_GROUP,
         )
-    return bool(config.get(CONF_GENERATION_ENTITY))
+    return bool(config.get(CONF_GENERATION_ENTITY) or config.get(CONF_INJECTION_ENTITY))
 
 
 def is_tarifa_branca_group_enabled(config: Mapping[str, object]) -> bool:

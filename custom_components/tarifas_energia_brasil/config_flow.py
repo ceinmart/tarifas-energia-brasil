@@ -20,6 +20,7 @@ from .const import (
     CONF_ENABLE_GENERATION_GROUP,
     CONF_ENABLE_TARIFA_BRANCA_GROUP,
     CONF_GENERATION_ENTITY,
+    CONF_INJECTION_ENTITY,
     CONF_READING_DAY,
     CONF_SUPPLY_TYPE,
     CONF_TB_EXTRA_HOLIDAYS,
@@ -57,8 +58,9 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             normalized_input = self._normalize_entry_payload(user_input)
             generation_entity = normalized_input.get(CONF_GENERATION_ENTITY)
+            injection_entity = normalized_input.get(CONF_INJECTION_ENTITY)
             supply_type = normalized_input.get(CONF_SUPPLY_TYPE)
-            if generation_entity and not supply_type:
+            if (generation_entity or injection_entity) and not supply_type:
                 errors["base"] = "supply_type_required"
             else:
                 await self.async_set_unique_id(normalized_input[CONF_CONCESSIONARIA])
@@ -141,6 +143,15 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             ),
             vol.Optional(
+                CONF_INJECTION_ENTITY,
+                default=defaults.get(CONF_INJECTION_ENTITY),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain=["sensor"],
+                    device_class=["energy"],
+                )
+            ),
+            vol.Optional(
                 CONF_SUPPLY_TYPE,
                 default=defaults.get(CONF_SUPPLY_TYPE),
             ): selector.SelectSelector(
@@ -162,7 +173,7 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         }
 
         if include_group_options:
-            if defaults.get(CONF_GENERATION_ENTITY):
+            if defaults.get(CONF_GENERATION_ENTITY) or defaults.get(CONF_INJECTION_ENTITY):
                 schema[
                     vol.Required(
                         CONF_ENABLE_GENERATION_GROUP,
@@ -213,7 +224,9 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Aplica defaults persistidos para os grupos da integracao."""
 
         normalized = dict(user_input)
-        has_generation = bool(normalized.get(CONF_GENERATION_ENTITY))
+        has_generation = bool(
+            normalized.get(CONF_GENERATION_ENTITY) or normalized.get(CONF_INJECTION_ENTITY)
+        )
 
         normalized[CONF_ENABLE_GENERATION_GROUP] = (
             is_generation_group_enabled(normalized) if has_generation else False
@@ -249,8 +262,9 @@ class TarifasEnergiaBrasilOptionsFlow(config_entries.OptionsFlow):
                 user_input
             )
             generation_entity = normalized_input.get(CONF_GENERATION_ENTITY)
+            injection_entity = normalized_input.get(CONF_INJECTION_ENTITY)
             supply_type = normalized_input.get(CONF_SUPPLY_TYPE)
-            if generation_entity and not supply_type:
+            if (generation_entity or injection_entity) and not supply_type:
                 errors["base"] = "supply_type_required"
             else:
                 return self.async_create_entry(title="", data=normalized_input)

@@ -6,10 +6,10 @@ Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de
 
 ## Status
 
-- Versao atual: `0.1.0-alpha.5` (pre-release).
+- Versao atual: `0.1.0-alpha.6` (pre-release).
 - Escopo inicial: base funcional da integracao + MVP com concessionarias suportadas.
 - Concessionaria obrigatoria do MVP: `CPFL-PIRATINING`.
-- Documentacao tecnica do pre-release: [DOCUMENTACAO_CODIGO_0.1.0-alpha.5.md](./DOCUMENTACAO_CODIGO_0.1.0-alpha.5.md).
+- Documentacao tecnica do pre-release: [DOCUMENTACAO_CODIGO_0.1.0-alpha.6.md](./DOCUMENTACAO_CODIGO_0.1.0-alpha.6.md).
 
 ## Instalacao (HACS)
 
@@ -33,7 +33,8 @@ Campos da configuracao inicial:
   - `csv_xml`
 - `Entidade de consumo acumulado em kWh` (obrigatoria).
 - `Entidade de geracao acumulada em kWh` (opcional).
-- `Tipo de fornecimento` (obrigatorio quando existe entidade de geracao):
+- `Entidade de energia injetada acumulada em kWh` (opcional, recomendada para SCEE e auto-consumo preciso).
+- `Tipo de fornecimento` (obrigatorio quando existe entidade de geracao ou injecao):
   - `monofasico`
   - `bifasico`
   - `trifasico`
@@ -46,7 +47,7 @@ Pos-configuracao (options flow):
 
 - Ajuste de concessionaria, frequencia, metodo ANEEL, entidades e quebras.
 - Controle de grupos de entidades no mesmo device principal:
-  - `Grupo de geracao/SCEE`: aparece quando existe entidade de geracao configurada.
+  - `Grupo de geracao/SCEE`: aparece quando existe entidade de geracao ou injecao configurada.
   - `Grupo de tarifa branca`: toggle explicito para publicar ou ocultar esse conjunto de sensores.
 - Ajuste manual dos horarios da Tarifa Branca:
   - `inicio/fim ponta`
@@ -121,7 +122,7 @@ Links de concessionarias usados para tributos (MVP atual):
   - consumo usa primeiro os creditos mais antigos;
   - creditos gerados no ciclo atual entram no ledger no fechamento do ciclo mensal.
 - O estado persistido inclui:
-  - acumuladores de consumo/geracao por periodo;
+  - acumuladores de consumo/geracao/injecao por periodo;
   - ciclo mensal atual;
   - credito consumido estimado no ciclo;
   - credito gerado estimado no ciclo;
@@ -186,8 +187,8 @@ Observacoes:
 | TUSD branca ponta | `tusd_branca_ponta_r_kwh` | `sensor.tusd_branca_ponta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | Parcela TUSD por posto. |
 | Tarifa branca ponta bruta | `tarifa_branca_ponta_bruta_r_kwh` | `sensor.tarifa_branca_ponta_bruta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | `TE + TUSD` ponta. |
 | Tarifa branca ponta final | `tarifa_branca_ponta_final_r_kwh` | `sensor.tarifa_branca_ponta_final` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | Com tributos por dentro. |
-| Fio B bruto | `fio_b_bruto_r_kwh` | `sensor.fio_b_bruto` | R$/kWh | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | `TUSD_FioB / 1000`. |
-| Fio B final | `fio_b_final_r_kwh` | `sensor.fio_b_final` | R$/kWh | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Com transicao regulatoria + tributos. |
+| Fio B bruto | `fio_b_bruto_r_kwh` | `sensor.fio_b_bruto` | R$/kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `TUSD_FioB / 1000`. |
+| Fio B final | `fio_b_final_r_kwh` | `sensor.fio_b_final` | R$/kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Com transicao regulatoria + tributos. |
 | PIS | `pis_percent` | `sensor.pis` | % | `measurement` | Sempre | Aliquota da concessionaria/fallback. |
 | COFINS | `cofins_percent` | `sensor.cofins` | % | `measurement` | Sempre | Aliquota da concessionaria/fallback. |
 | ICMS | `icms_percent` | `sensor.icms` | % | `measurement` | Sempre | Pode aplicar regra por faixa mensal. |
@@ -195,22 +196,22 @@ Observacoes:
 | Adicional da bandeira | `adicional_bandeira_r_kwh` | `sensor.adicional_bandeira` | R$/kWh | `measurement` | Sempre | Adicional homologado convertido de R$/MWh. |
 | Indicador taxa minima | `indicador_taxa_minima` | `sensor.indicador_taxa_minima` | texto (`sim`/`nao`) | sem `state_class` | Sempre | Indica se disponibilidade minima foi aplicada no mensal. |
 | kWh adicionados para disponibilidade | `kwh_adicionados_disponibilidade` | `sensor.kwh_adicionados_para_disponibilidade` | kWh | `measurement` | Sempre | Diferenca para atingir disponibilidade minima. |
-| Saldo de creditos do mes anterior | `saldo_creditos_mes_anterior_kwh` | `sensor.saldo_creditos_do_mes_anterior` | kWh | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
-| Previsao de creditos gerados | `previsao_creditos_gerados_kwh` | `sensor.previsao_de_creditos_gerados` | kWh | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
-| Auto-consumo | `auto_consumo_kwh` | `sensor.auto_consumo` | kWh | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
-| Auto-consumo em reais | `auto_consumo_reais` | `sensor.auto_consumo_em_reais` | R$ | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
+| Saldo de creditos do mes anterior | `saldo_creditos_mes_anterior_kwh` | `sensor.saldo_creditos_do_mes_anterior` | kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
+| Previsao de creditos gerados | `previsao_creditos_gerados_kwh` | `sensor.previsao_de_creditos_gerados` | kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Usa injecao acumulada quando configurada. |
+| Auto-consumo | `auto_consumo_kwh` | `sensor.auto_consumo` | kWh | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Usa `geracao - injecao` quando a entidade de injecao existe. |
+| Auto-consumo em reais | `auto_consumo_reais` | `sensor.auto_consumo_em_reais` | R$ | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Auto-consumo vezes tarifa convencional final. |
 | Valor conta consumo regular diario | `valor_conta_consumo_regular_daily_r` | `sensor.valor_conta_consumo_regular_diario` | R$ | `measurement` | Quando `daily` estiver habilitado | Sensor dinamico por quebra de periodo. |
 | Valor conta consumo regular semanal | `valor_conta_consumo_regular_weekly_r` | `sensor.valor_conta_consumo_regular_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado | Sensor dinamico por quebra de periodo. |
 | Valor conta consumo regular mensal | `valor_conta_consumo_regular_monthly_r` | `sensor.valor_conta_consumo_regular_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado | Sensor dinamico por quebra de periodo. |
 | Valor conta tarifa branca diario | `valor_conta_tarifa_branca_daily_r` | `sensor.valor_conta_tarifa_branca_diario` | R$ | `measurement` | Quando `daily` estiver habilitado e o grupo `Tarifa Branca` estiver habilitado | Sensor dinamico por quebra de periodo. |
 | Valor conta tarifa branca semanal | `valor_conta_tarifa_branca_weekly_r` | `sensor.valor_conta_tarifa_branca_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado e o grupo `Tarifa Branca` estiver habilitado | Sensor dinamico por quebra de periodo. |
 | Valor conta tarifa branca mensal | `valor_conta_tarifa_branca_monthly_r` | `sensor.valor_conta_tarifa_branca_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado e o grupo `Tarifa Branca` estiver habilitado | Sensor dinamico por quebra de periodo. |
-| Valor conta com geracao diario | `valor_conta_com_geracao_daily_r` | `sensor.valor_conta_com_geracao_diario` | R$ | `measurement` | Quando `daily` estiver habilitado, houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
-| Valor conta com geracao semanal | `valor_conta_com_geracao_weekly_r` | `sensor.valor_conta_com_geracao_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado, houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
-| Valor conta com geracao mensal | `valor_conta_com_geracao_monthly_r` | `sensor.valor_conta_com_geracao_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado, houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
-| Valor Fio B compensada diario | `valor_fio_b_compensada_daily_r` | `sensor.valor_fio_b_compensada_diario` | R$ | `measurement` | Quando `daily` estiver habilitado, houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
-| Valor Fio B compensada semanal | `valor_fio_b_compensada_weekly_r` | `sensor.valor_fio_b_compensada_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado, houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
-| Valor Fio B compensada mensal | `valor_fio_b_compensada_monthly_r` | `sensor.valor_fio_b_compensada_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado, houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
+| Valor conta com geracao diario | `valor_conta_com_geracao_daily_r` | `sensor.valor_conta_com_geracao_diario` | R$ | `measurement` | Quando `daily` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
+| Valor conta com geracao semanal | `valor_conta_com_geracao_weekly_r` | `sensor.valor_conta_com_geracao_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
+| Valor conta com geracao mensal | `valor_conta_com_geracao_monthly_r` | `sensor.valor_conta_com_geracao_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
+| Valor Fio B compensada diario | `valor_fio_b_compensada_daily_r` | `sensor.valor_fio_b_compensada_diario` | R$ | `measurement` | Quando `daily` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Usa energia compensada apurada pelo SCEE. |
+| Valor Fio B compensada semanal | `valor_fio_b_compensada_weekly_r` | `sensor.valor_fio_b_compensada_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Usa energia compensada apurada pelo SCEE. |
+| Valor Fio B compensada mensal | `valor_fio_b_compensada_monthly_r` | `sensor.valor_fio_b_compensada_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Usa energia compensada apurada pelo SCEE. |
 
 ## Calculos detalhados
 
@@ -241,13 +242,16 @@ Observacoes:
 8. SCEE (modelo inicial):
    - `valor_consumo_scee = valor_energia_nao_compensada + valor_fio_b_compensada`
    - `valor_consumo_faturado = max(valor_disponibilidade, valor_consumo_scee)`
-   - consumo e geracao acumulados agora sao apurados de forma incremental no tempo, com rateio por virada de dia/semana/ciclo mensal
+   - consumo, geracao e injecao acumulados agora sao apurados de forma incremental no tempo, com rateio por virada de dia/semana/ciclo mensal
+   - quando a entidade de injecao existe, ela e usada como energia compensavel do SCEE
+   - auto-consumo usa `max(geracao_acumulada - injecao_acumulada, 0)` quando as duas entidades estao configuradas
    - creditos continuam persistidos e consumidos do mais antigo para o mais novo
 
 Limitacoes atuais da pre-release:
 
 - A Tarifa Branca depende da qualidade temporal da entidade acumulada de consumo; leituras muito espacadas reduzem a confianca do rateio por posto.
 - O motor SCEE esta mais robusto no ciclo incremental, mas ainda precisa de validacao contra faturas reais para fechamento fino de casos regulatórios.
+- Sem entidade de injecao configurada, auto-consumo e creditos seguem em modo estimado/fallback a partir dos dados disponiveis.
 - Entidades auxiliares de horario efetivo, posto atual e consumo por posto ainda nao foram expostas; hoje o calculo ja usa essa logica internamente.
 - Extratores web podem exigir ajuste quando houver mudanca de layout das concessionarias.
 
