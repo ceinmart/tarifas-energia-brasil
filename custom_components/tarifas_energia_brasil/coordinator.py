@@ -62,7 +62,7 @@ from .credito_ledger import (
     serialize_entries,
     total_credits_kwh,
 )
-from .icms_rules import resolve_icms_percent, resolve_icms_reference_percent
+from .icms_rules import resolve_icms_percent
 from .models import CollectionMetadata, SnapshotCalculo
 from .tarifa_branca_time import (
     POSTOS_TARIFA_BRANCA,
@@ -736,8 +736,8 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                 tusd_convencional_r_kwh=float(
                     values.get("tusd_convencional_r_kwh", 0.0) or 0.0
                 ),
-                concessionaria=concessionaria,
-                fallback_icms_percent=fallback_icms_percent,
+                icms_consumo_percent=icms_aplicado_percent,
+                icms_consumo_source=icms_source,
                 reference_date=reference_date,
                 pis_percent=pis_percent,
                 cofins_percent=cofins_percent,
@@ -749,18 +749,14 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         self,
         fio_b_bruto_r_kwh: float,
         tusd_convencional_r_kwh: float,
-        concessionaria: str,
-        fallback_icms_percent: float,
+        icms_consumo_percent: float,
+        icms_consumo_source: str,
         reference_date: date,
         pis_percent: float,
         cofins_percent: float,
     ) -> dict[str, float | str]:
         """Calcula custo efetivo do Fio B e monta atributos explicativos."""
 
-        icms_consumo_percent, icms_consumo_source = resolve_icms_reference_percent(
-            concessionaria=concessionaria,
-            fallback_icms_percent=fallback_icms_percent,
-        )
         detalhes = calcular_fio_b_custo_efetivo_compensacao(
             tusd_convencional_r_kwh=tusd_convencional_r_kwh,
             fio_b_bruto_r_kwh=fio_b_bruto_r_kwh,
@@ -1263,8 +1259,8 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         fio_b_effective_values = self._fio_b_effective_values(
             fio_b_bruto_r_kwh=fio_b_bruto,
             tusd_convencional_r_kwh=tarifas_data["convencional"]["tusd_r_kwh"],
-            concessionaria=concessionaria,
-            fallback_icms_percent=tributos_data.icms_percent,
+            icms_consumo_percent=icms_aplicado_percent,
+            icms_consumo_source=icms_source,
             reference_date=referencia,
             pis_percent=tributos_data.pis_percent,
             cofins_percent=tributos_data.cofins_percent,
