@@ -101,6 +101,23 @@ def test_fio_b_bruto_e_final():
     assert final > bruto * 0.60
 
 
+def test_fio_b_custo_efetivo_compensacao_bate_diferenca_cpfl():
+    result = calc.calcular_fio_b_custo_efetivo_compensacao(
+        tusd_convencional_r_kwh=0.39564,
+        fio_b_bruto_r_kwh=0.189008164374,
+        ano=2026,
+        pis_percent=1.10,
+        cofins_percent=5.02,
+        icms_consumo_percent=18.0,
+        icms_compensacao_percent=0.0,
+    )
+
+    assert result["fio_b_transicao_r_kwh"] == pytest.approx(0.1134048986244)
+    assert result["tusd_consumo_final_r_kwh"] == pytest.approx(0.513940993692)
+    assert result["tusd_credito_final_r_kwh"] == pytest.approx(0.300633895798)
+    assert result["fio_b_final_r_kwh"] == pytest.approx(0.213307097894)
+
+
 def test_bandeira_tarifaria():
     value = calc.calcular_valor_bandeira(kwh_faturado=220, adicional_bandeira_r_kwh=0.01885)
     assert value == pytest.approx(4.147)

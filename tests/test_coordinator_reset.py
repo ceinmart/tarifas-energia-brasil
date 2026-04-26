@@ -561,4 +561,7 @@ def test_dynamic_icms_refresh_uses_monthly_consumption_base():
     assert values["tarifa_convencional_final_r_kwh"] == pytest.approx(
         0.9748154981549815
     )
-    assert values["fio_b_final_r_kwh"] == pytest.approx(0.14945295021665786)
+    assert values["fio_b_final_r_kwh"] == pytest.approx(0.21330709789353297)
+    assert values["icms_consumo_percent"] == pytest.approx(18.0)
+    assert values["icms_compensacao_percent"] == pytest.approx(0.0)
+    assert "TUSD consumo final" in values["fio_b_calculo_expressao"]

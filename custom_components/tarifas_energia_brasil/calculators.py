@@ -180,6 +180,66 @@ def calcular_fio_b_final(
     )
 
 
+def aplicar_pis_cofins_icms_separados(
+    valor_sem_tributos: float,
+    pis_percent: float,
+    cofins_percent: float,
+    icms_percent: float,
+) -> float:
+    """Aplica ICMS e PIS/COFINS em bases separadas, como observado em GD."""
+
+    pis_cofins_decimal = percent_to_decimal(pis_percent + cofins_percent)
+    icms_decimal = percent_to_decimal(icms_percent)
+    if pis_cofins_decimal >= 1 or icms_decimal >= 1:
+        raise ValueError("Aliquotas invalidas para calculo por dentro.")
+    return valor_sem_tributos / (1 - icms_decimal) / (1 - pis_cofins_decimal)
+
+
+def calcular_fio_b_custo_efetivo_compensacao(
+    tusd_convencional_r_kwh: float,
+    fio_b_bruto_r_kwh: float,
+    ano: int,
+    pis_percent: float,
+    cofins_percent: float,
+    icms_consumo_percent: float,
+    icms_compensacao_percent: float = 0.0,
+) -> dict[str, float]:
+    """Calcula diferenca efetiva entre TUSD consumida e TUSD creditada."""
+
+    percentual_transicao = percentual_fio_b_por_ano(ano)
+    fio_b_transicao_r_kwh = fio_b_bruto_r_kwh * percentual_transicao
+    tusd_credito_base_r_kwh = max(
+        tusd_convencional_r_kwh - fio_b_transicao_r_kwh,
+        0.0,
+    )
+    tusd_consumo_final_r_kwh = aplicar_pis_cofins_icms_separados(
+        tusd_convencional_r_kwh,
+        pis_percent,
+        cofins_percent,
+        icms_consumo_percent,
+    )
+    tusd_credito_final_r_kwh = aplicar_pis_cofins_icms_separados(
+        tusd_credito_base_r_kwh,
+        pis_percent,
+        cofins_percent,
+        icms_compensacao_percent,
+    )
+    return {
+        "fio_b_final_r_kwh": max(
+            tusd_consumo_final_r_kwh - tusd_credito_final_r_kwh,
+            0.0,
+        ),
+        "fio_b_transicao_r_kwh": fio_b_transicao_r_kwh,
+        "fio_b_percentual_transicao": percentual_transicao,
+        "tusd_credito_base_r_kwh": tusd_credito_base_r_kwh,
+        "tusd_consumo_final_r_kwh": tusd_consumo_final_r_kwh,
+        "tusd_credito_final_r_kwh": tusd_credito_final_r_kwh,
+        "icms_consumo_percent": icms_consumo_percent,
+        "icms_compensacao_percent": icms_compensacao_percent,
+        "pis_cofins_percent": pis_percent + cofins_percent,
+    }
+
+
 def calcular_valor_bandeira(
     kwh_faturado: float,
     adicional_bandeira_r_kwh: float,

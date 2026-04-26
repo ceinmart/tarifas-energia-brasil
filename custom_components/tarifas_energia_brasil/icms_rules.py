@@ -77,3 +77,17 @@ def resolve_icms_percent(
             return rule.icms_percent, "regra_faixa_consumo"
 
     return fallback_icms_percent, "fallback_sem_match"
+
+
+def resolve_icms_reference_percent(
+    concessionaria: str,
+    fallback_icms_percent: float,
+) -> tuple[float, str]:
+    """Resolve ICMS de referencia para estimativas de ciclo completo."""
+
+    normalized = (concessionaria or "").strip().upper()
+    rules = ICMS_RULES_BY_CONCESSIONARIA.get(normalized)
+    if not rules:
+        return fallback_icms_percent, "fallback_sem_regra"
+
+    return max(rule.icms_percent for rule in rules), "maior_faixa_consumo"

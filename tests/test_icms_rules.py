@@ -60,3 +60,9 @@ def test_icms_fallback_without_rule():
     value, source = icms.resolve_icms_percent("CEMIG-D", 150, 18.0)
     assert value == pytest.approx(18.0)
     assert source == "fallback_sem_regra"
+
+
+def test_icms_reference_uses_highest_range():
+    value, source = icms.resolve_icms_reference_percent("CPFL-PIRATINING", 12.0)
+    assert value == pytest.approx(18.0)
+    assert source == "maior_faixa_consumo"

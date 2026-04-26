@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.1.0-alpha.9 - 2026-04-25
+
+### Alterado
+
+- `Fio B final` passa a representar o custo efetivo da compensacao de energia, calculado como TUSD de consumo final menos TUSD injetada creditada final.
+- O calculo do custo efetivo do Fio B passa a usar ICMS de referencia da faixa residencial cheia para consumo e ICMS zero para compensacao, evitando que o inicio do ciclo mensal subestime o custo.
+- O sensor `Fio B final` passa a expor atributos com a expressao textual do calculo e os valores usados.
+
+### Testes
+
+- Cobertura adicionada para o custo efetivo de compensacao e para a selecao do ICMS de referencia por concessionaria.
+
 ## 0.1.0-alpha.8 - 2026-04-25
 
 ### Adicionado

@@ -534,4 +534,20 @@ class TarifasEnergiaBrasilSensor(
         diagnostics = self.coordinator.data.diagnostics
         attrs["prioridade_aneel"] = diagnostics.get("prioridade_aneel")
         attrs["mensagem_erro"] = diagnostics.get("mensagem_erro")
+        if self.entity_description.value_key == "fio_b_final_r_kwh":
+            values = self.coordinator.data.values
+            for key in (
+                "fio_b_calculo_expressao",
+                "fio_b_transicao_r_kwh",
+                "fio_b_percentual_transicao",
+                "tusd_consumo_final_r_kwh",
+                "tusd_credito_base_r_kwh",
+                "tusd_credito_final_r_kwh",
+                "icms_consumo_percent",
+                "icms_compensacao_percent",
+                "pis_cofins_percent",
+                "fio_b_icms_consumo_source",
+            ):
+                if key in values:
+                    attrs[key] = values[key]
         return attrs

@@ -21,7 +21,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .aneel_client import AneelClient, AneelClientError
 from .calculators import (
     calcular_auto_consumo_kwh,
-    calcular_fio_b_final,
+    calcular_fio_b_custo_efetivo_compensacao,
     calcular_scee_creditos_prioritarios,
     calcular_tarifa_branca_por_posto,
     calcular_tarifa_convencional,
@@ -62,7 +62,7 @@ from .credito_ledger import (
     serialize_entries,
     total_credits_kwh,
 )
-from .icms_rules import resolve_icms_percent
+from .icms_rules import resolve_icms_percent, resolve_icms_reference_percent
 from .models import CollectionMetadata, SnapshotCalculo
 from .tarifa_branca_time import (
     POSTOS_TARIFA_BRANCA,
@@ -730,14 +730,60 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             "tarifa_final_r_kwh"
         ]
         values["icms_percent"] = icms_aplicado_percent
-        values["fio_b_final_r_kwh"] = calcular_fio_b_final(
-            fio_b_bruto_r_kwh=float(values.get("fio_b_bruto_r_kwh", 0.0) or 0.0),
+        values.update(
+            self._fio_b_effective_values(
+                fio_b_bruto_r_kwh=float(values.get("fio_b_bruto_r_kwh", 0.0) or 0.0),
+                tusd_convencional_r_kwh=float(
+                    values.get("tusd_convencional_r_kwh", 0.0) or 0.0
+                ),
+                concessionaria=concessionaria,
+                fallback_icms_percent=fallback_icms_percent,
+                reference_date=reference_date,
+                pis_percent=pis_percent,
+                cofins_percent=cofins_percent,
+            )
+        )
+        return icms_source
+
+    def _fio_b_effective_values(
+        self,
+        fio_b_bruto_r_kwh: float,
+        tusd_convencional_r_kwh: float,
+        concessionaria: str,
+        fallback_icms_percent: float,
+        reference_date: date,
+        pis_percent: float,
+        cofins_percent: float,
+    ) -> dict[str, float | str]:
+        """Calcula custo efetivo do Fio B e monta atributos explicativos."""
+
+        icms_consumo_percent, icms_consumo_source = resolve_icms_reference_percent(
+            concessionaria=concessionaria,
+            fallback_icms_percent=fallback_icms_percent,
+        )
+        detalhes = calcular_fio_b_custo_efetivo_compensacao(
+            tusd_convencional_r_kwh=tusd_convencional_r_kwh,
+            fio_b_bruto_r_kwh=fio_b_bruto_r_kwh,
             ano=reference_date.year,
             pis_percent=pis_percent,
             cofins_percent=cofins_percent,
-            icms_percent=icms_aplicado_percent,
+            icms_consumo_percent=icms_consumo_percent,
+            icms_compensacao_percent=0.0,
         )
-        return icms_source
+        detalhes["fio_b_icms_consumo_source"] = icms_consumo_source
+        detalhes["fio_b_calculo_expressao"] = (
+            "TUSD consumo final "
+            f"({tusd_convencional_r_kwh:.6f} / (1 - {icms_consumo_percent:.2f}%) "
+            f"/ (1 - {pis_percent + cofins_percent:.2f}%)) - "
+            "TUSD injetada creditada final "
+            f"(({tusd_convencional_r_kwh:.6f} - "
+            f"({fio_b_bruto_r_kwh:.6f} * "
+            f"{detalhes['fio_b_percentual_transicao'] * 100:.2f}%)) "
+            f"/ (1 - {detalhes['icms_compensacao_percent']:.2f}%) "
+            f"/ (1 - {pis_percent + cofins_percent:.2f}%)) = "
+            f"{detalhes['fio_b_final_r_kwh']:.6f} R$/kWh"
+        )
+        return detalhes
 
     def _cached_rollover_context(self) -> dict[str, float]:
         """Retorna contexto tarifario atual para rollover de ciclo sem nova coleta."""
@@ -1214,12 +1260,14 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         )
 
         fio_b_bruto = fio_b_data["convencional_bruto_r_kwh"]
-        fio_b_final = calcular_fio_b_final(
+        fio_b_effective_values = self._fio_b_effective_values(
             fio_b_bruto_r_kwh=fio_b_bruto,
-            ano=referencia.year,
+            tusd_convencional_r_kwh=tarifas_data["convencional"]["tusd_r_kwh"],
+            concessionaria=concessionaria,
+            fallback_icms_percent=tributos_data.icms_percent,
+            reference_date=referencia,
             pis_percent=tributos_data.pis_percent,
             cofins_percent=tributos_data.cofins_percent,
-            icms_percent=icms_aplicado_percent,
         )
 
         disponibilidade_kwh = disponibilidade_minima_kwh(tipo_fornecimento)
@@ -1264,7 +1312,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                 "tarifa_final_r_kwh"
             ],
             "fio_b_bruto_r_kwh": fio_b_bruto,
-            "fio_b_final_r_kwh": fio_b_final,
+            **fio_b_effective_values,
             "pis_percent": tributos_data.pis_percent,
             "cofins_percent": tributos_data.cofins_percent,
             "icms_percent": icms_aplicado_percent,

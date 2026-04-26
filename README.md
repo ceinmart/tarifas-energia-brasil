@@ -6,10 +6,10 @@ Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de
 
 ## Status
 
-- Versao atual: `0.1.0-alpha.8` (pre-release).
+- Versao atual: `0.1.0-alpha.9` (pre-release).
 - Escopo inicial: base funcional da integracao + MVP com concessionarias suportadas.
 - Concessionaria obrigatoria do MVP: `CPFL-PIRATINING`.
-- Documentacao tecnica do pre-release: [DOCUMENTACAO_CODIGO_0.1.0-alpha.8.md](./DOCUMENTACAO_CODIGO_0.1.0-alpha.8.md).
+- Documentacao tecnica do pre-release: [DOCUMENTACAO_CODIGO_0.1.0-alpha.9.md](./DOCUMENTACAO_CODIGO_0.1.0-alpha.9.md).
 
 ## Instalacao (HACS)
 
@@ -188,7 +188,7 @@ Observacoes:
 | Tarifa branca ponta bruta | `tarifa_branca_ponta_bruta_r_kwh` | `sensor.tarifa_branca_ponta_bruta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | `TE + TUSD` ponta. |
 | Tarifa branca ponta final | `tarifa_branca_ponta_final_r_kwh` | `sensor.tarifa_branca_ponta_final` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | Com tributos por dentro. |
 | Fio B bruto | `fio_b_bruto_r_kwh` | `sensor.fio_b_bruto` | R$/kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `TUSD_FioB / 1000`. |
-| Fio B final | `fio_b_final_r_kwh` | `sensor.fio_b_final` | R$/kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Com transicao regulatoria + tributos. |
+| Fio B final | `fio_b_final_r_kwh` | `sensor.fio_b_final` | R$/kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Custo efetivo da compensacao: TUSD consumo final menos TUSD injetada creditada final. Inclui atributos com a expressao do calculo. |
 | PIS | `pis_percent` | `sensor.pis` | % | `measurement` | Sempre | Aliquota da concessionaria/fallback. |
 | COFINS | `cofins_percent` | `sensor.cofins` | % | `measurement` | Sempre | Aliquota da concessionaria/fallback. |
 | ICMS | `icms_percent` | `sensor.icms` | % | `measurement` | Sempre | Pode aplicar regra por faixa mensal. |
