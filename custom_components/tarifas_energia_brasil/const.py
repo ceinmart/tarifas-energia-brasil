@@ -13,7 +13,7 @@ from homeassistant.const import Platform
 
 DOMAIN = "tarifas_energia_brasil"
 NAME = "Tarifas Energia Brasil"
-VERSION = "0.1.0-alpha.10"
+VERSION = "0.1.0"
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
@@ -98,7 +98,7 @@ SUPPORTED_CONCESSIONARIAS: Mapping[str, ConcessionariaInfo] = {
         suportada=True,
         extrator_tributos="cpfl_piratining",
         confianca=ATTR_CONFIANCA_ALTA,
-        observacao="MVP obrigatorio da pre-release.",
+        observacao="MVP obrigatorio da release inicial.",
     ),
     "CPFL-PAULISTA": ConcessionariaInfo(
         slug="cpfl_paulista",

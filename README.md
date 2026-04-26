@@ -6,10 +6,10 @@ Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de
 
 ## Status
 
-- Versao atual: `0.1.0-alpha.10` (pre-release).
+- Versao atual: `0.1.0` (release oficial).
 - Escopo inicial: base funcional da integracao + MVP com concessionarias suportadas.
 - Concessionaria obrigatoria do MVP: `CPFL-PIRATINING`.
-- Documentacao tecnica do pre-release: [DOCUMENTACAO_CODIGO_0.1.0-alpha.10.md](./DOCUMENTACAO_CODIGO_0.1.0-alpha.10.md).
+- Documentacao tecnica de referencia: [DOCUMENTACAO_CODIGO_0.1.0-alpha.10.md](./DOCUMENTACAO_CODIGO_0.1.0-alpha.10.md).
 
 ## Instalacao (HACS)
 
@@ -247,7 +247,7 @@ Observacoes:
    - auto-consumo usa `max(geracao_acumulada - injecao_acumulada, 0)` quando as duas entidades estao configuradas
    - creditos continuam persistidos e consumidos do mais antigo para o mais novo
 
-Limitacoes atuais da pre-release:
+Limitacoes atuais da release:
 
 - A Tarifa Branca depende da qualidade temporal da entidade acumulada de consumo; leituras muito espacadas reduzem a confianca do rateio por posto.
 - O motor SCEE esta mais robusto no ciclo incremental, mas ainda precisa de validacao contra faturas reais para fechamento fino de casos regulatórios.

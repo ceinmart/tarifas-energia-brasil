@@ -877,9 +877,9 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
     def _process_energy_states(
         self,
         now: datetime,
-        consumo_total_kwh: float,
-        geracao_total_kwh: float,
-        injecao_total_kwh: float,
+        consumo_total_kwh: float | None,
+        geracao_total_kwh: float | None,
+        injecao_total_kwh: float | None,
         reading_day: int,
         tariff_context: dict[str, float],
     ) -> tuple[
@@ -896,57 +896,79 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             self._last_geracao_timestamp or now,
         )
 
-        consumo_delta = self._prepare_delta_context(
-            consumo_total_kwh,
-            now,
-            self._last_consumo_total_kwh,
-            self._last_consumo_timestamp,
-        )
-        geracao_delta = self._prepare_delta_context(
-            geracao_total_kwh,
-            now,
-            self._last_geracao_total_kwh,
-            self._last_geracao_timestamp,
-        )
-        injecao_delta = self._prepare_delta_context(
-            injecao_total_kwh,
-            now,
-            self._last_injecao_total_kwh,
-            self._last_injecao_timestamp,
-        )
+        consumo_delta = None
+        consumo_rollovers: dict[str, list[tuple[str, float]]] = {}
+        if consumo_total_kwh is None:
+            consumo_periodos = self._current_period_values(self._consumo_period_state)
+            consumo_tarifa_branca = self._current_posto_period_values(
+                self._consumo_tarifa_branca_state
+            )
+        else:
+            consumo_delta = self._prepare_delta_context(
+                consumo_total_kwh,
+                now,
+                self._last_consumo_total_kwh,
+                self._last_consumo_timestamp,
+            )
+            consumo_periodos, consumo_rollovers = self._apply_scalar_delta_context(
+                self._consumo_period_state,
+                now,
+                reading_day,
+                consumo_delta,
+            )
+            (
+                consumo_tarifa_branca,
+                _tarifa_rollovers,
+            ) = self._apply_tarifa_branca_delta_context(
+                self._consumo_tarifa_branca_state,
+                now,
+                reading_day,
+                consumo_delta,
+                schedule,
+                holidays,
+            )
 
-        consumo_periodos, consumo_rollovers = self._apply_scalar_delta_context(
-            self._consumo_period_state,
-            now,
-            reading_day,
-            consumo_delta,
-        )
-        geracao_periodos, geracao_rollovers = self._apply_scalar_delta_context(
-            self._geracao_period_state,
-            now,
-            reading_day,
-            geracao_delta,
-        )
-        injecao_periodos, injecao_rollovers = self._apply_scalar_delta_context(
-            self._injecao_period_state,
-            now,
-            reading_day,
-            injecao_delta,
-        )
-        consumo_tarifa_branca, _tarifa_rollovers = self._apply_tarifa_branca_delta_context(
-            self._consumo_tarifa_branca_state,
-            now,
-            reading_day,
-            consumo_delta,
-            schedule,
-            holidays,
-        )
+        geracao_delta = None
+        geracao_rollovers: dict[str, list[tuple[str, float]]] = {}
+        if geracao_total_kwh is None:
+            geracao_periodos = self._current_period_values(self._geracao_period_state)
+        else:
+            geracao_delta = self._prepare_delta_context(
+                geracao_total_kwh,
+                now,
+                self._last_geracao_total_kwh,
+                self._last_geracao_timestamp,
+            )
+            geracao_periodos, geracao_rollovers = self._apply_scalar_delta_context(
+                self._geracao_period_state,
+                now,
+                reading_day,
+                geracao_delta,
+            )
 
-        if consumo_delta.get("reset_detected"):
+        injecao_delta = None
+        injecao_rollovers: dict[str, list[tuple[str, float]]] = {}
+        if injecao_total_kwh is None:
+            injecao_periodos = self._current_period_values(self._injecao_period_state)
+        else:
+            injecao_delta = self._prepare_delta_context(
+                injecao_total_kwh,
+                now,
+                self._last_injecao_total_kwh,
+                self._last_injecao_timestamp,
+            )
+            injecao_periodos, injecao_rollovers = self._apply_scalar_delta_context(
+                self._injecao_period_state,
+                now,
+                reading_day,
+                injecao_delta,
+            )
+
+        if consumo_delta is not None and consumo_delta.get("reset_detected"):
             self._consumo_reset_detectado += 1
-        if geracao_delta.get("reset_detected"):
+        if geracao_delta is not None and geracao_delta.get("reset_detected"):
             self._geracao_reset_detectado += 1
-        if injecao_delta.get("reset_detected"):
+        if injecao_delta is not None and injecao_delta.get("reset_detected"):
             self._injecao_reset_detectado += 1
 
         self._finalize_monthly_rollovers(
@@ -960,13 +982,18 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             tariff_context=tariff_context,
         )
 
-        self._last_consumo_total_kwh = consumo_total_kwh
-        self._last_geracao_total_kwh = geracao_total_kwh
-        self._last_injecao_total_kwh = injecao_total_kwh
-        self._last_consumo_timestamp = now
-        self._last_geracao_timestamp = now
-        self._last_injecao_timestamp = now
-        self._ultimo_ciclo_mensal = str(self._consumo_period_state[BREAKDOWN_MONTHLY]["key"])
+        if consumo_total_kwh is not None:
+            self._last_consumo_total_kwh = consumo_total_kwh
+            self._last_consumo_timestamp = now
+        if geracao_total_kwh is not None:
+            self._last_geracao_total_kwh = geracao_total_kwh
+            self._last_geracao_timestamp = now
+        if injecao_total_kwh is not None:
+            self._last_injecao_total_kwh = injecao_total_kwh
+            self._last_injecao_timestamp = now
+        current_monthly_key = self._consumo_period_state[BREAKDOWN_MONTHLY]["key"]
+        if current_monthly_key is not None:
+            self._ultimo_ciclo_mensal = str(current_monthly_key)
         return consumo_periodos, geracao_periodos, injecao_periodos, consumo_tarifa_branca
 
     def _apply_dynamic_values_to_snapshot(
@@ -1366,8 +1393,16 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             consumo_tarifa_branca=consumo_tarifa_branca,
             has_generation=bool(geracao_entity),
             has_injection=bool(injecao_entity),
-            geracao_total_kwh=geracao_total_kwh,
-            injecao_total_kwh=injecao_total_kwh,
+            geracao_total_kwh=(
+                geracao_total_kwh
+                if geracao_total_kwh is not None
+                else self._last_geracao_total_kwh
+            ),
+            injecao_total_kwh=(
+                injecao_total_kwh
+                if injecao_total_kwh is not None
+                else self._last_injecao_total_kwh
+            ),
             tipo_fornecimento=tipo_fornecimento,
         )
 
@@ -1444,21 +1479,21 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             return self.entry.data[key]
         return default
 
-    def _read_entity_kwh(self, entity_id: Any) -> float:
+    def _read_entity_kwh(self, entity_id: Any) -> float | None:
         """Le estado numérico de entidade configurada."""
 
         if not isinstance(entity_id, str) or not entity_id:
-            return 0.0
+            return None
         state = self.hass.states.get(entity_id)
         if state is None:
-            return 0.0
+            return None
         raw = state.state
         if raw in ("unknown", "unavailable", ""):
-            return 0.0
+            return None
         try:
             return max(float(raw), 0.0)
         except (TypeError, ValueError):
-            return 0.0
+            return None
 
     def _update_period_accumulator(
         self,

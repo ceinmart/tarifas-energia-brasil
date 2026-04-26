@@ -354,6 +354,69 @@ def test_tarifa_branca_state_does_not_copy_reset_total_to_current_posto():
     assert coordinator._tarifa_branca_low_confidence is False
 
 
+def test_process_energy_states_ignores_unavailable_startup_reading():
+    coordinator = _build_coordinator()
+    start = datetime(2026, 4, 25, 12, 0, tzinfo=UTC)
+    now = datetime(2026, 4, 25, 12, 1, tzinfo=UTC)
+    next_now = datetime(2026, 4, 25, 12, 2, tzinfo=UTC)
+    coordinator.entry = types.SimpleNamespace(
+        data={CONF_CONCESSIONARIA: "CPFL-PIRATINING"},
+        options={},
+    )
+    coordinator._creditos_ledger = []
+    coordinator._last_consumo_total_kwh = 1200.0
+    coordinator._last_consumo_timestamp = start
+    coordinator._last_geracao_total_kwh = None
+    coordinator._last_geracao_timestamp = None
+    coordinator._last_injecao_total_kwh = None
+    coordinator._last_injecao_timestamp = None
+    coordinator._consumo_reset_detectado = 0
+    coordinator._geracao_reset_detectado = 0
+    coordinator._injecao_reset_detectado = 0
+    coordinator._ultimo_ciclo_mensal = "2026-04-D24"
+    coordinator._credito_estimado_atual_kwh = 0.0
+    coordinator._credito_consumido_estimado_atual_kwh = 0.0
+    coordinator._consumo_period_state = TarifasEnergiaBrasilCoordinator._new_period_state()
+    coordinator._geracao_period_state = TarifasEnergiaBrasilCoordinator._new_period_state()
+    coordinator._injecao_period_state = TarifasEnergiaBrasilCoordinator._new_period_state()
+    coordinator._consumo_tarifa_branca_state = (
+        TarifasEnergiaBrasilCoordinator._new_posto_period_state()
+    )
+    coordinator._consumo_period_state[BREAKDOWN_DAILY]["key"] = "2026-04-25"
+    coordinator._consumo_period_state[BREAKDOWN_DAILY]["kwh"] = 2.0
+    coordinator._consumo_period_state[BREAKDOWN_WEEKLY]["key"] = "2026-W17"
+    coordinator._consumo_period_state[BREAKDOWN_WEEKLY]["kwh"] = 8.0
+    coordinator._consumo_period_state[BREAKDOWN_MONTHLY]["key"] = "2026-04-D24"
+    coordinator._consumo_period_state[BREAKDOWN_MONTHLY]["kwh"] = 10.0
+
+    values, _geracao, _injecao, _tarifa_branca = coordinator._process_energy_states(
+        now=now,
+        consumo_total_kwh=None,
+        geracao_total_kwh=None,
+        injecao_total_kwh=None,
+        reading_day=24,
+        tariff_context={},
+    )
+
+    assert values[BREAKDOWN_MONTHLY] == pytest.approx(10.0)
+    assert coordinator._last_consumo_total_kwh == pytest.approx(1200.0)
+    assert coordinator._last_consumo_timestamp == start
+    assert coordinator._consumo_reset_detectado == 0
+
+    values, _geracao, _injecao, _tarifa_branca = coordinator._process_energy_states(
+        now=next_now,
+        consumo_total_kwh=1201.5,
+        geracao_total_kwh=None,
+        injecao_total_kwh=None,
+        reading_day=24,
+        tariff_context={},
+    )
+
+    assert values[BREAKDOWN_MONTHLY] == pytest.approx(11.5)
+    assert coordinator._last_consumo_total_kwh == pytest.approx(1201.5)
+    assert coordinator._consumo_reset_detectado == 0
+
+
 def test_dynamic_values_calculate_auto_consumo_from_generated_minus_injected():
     coordinator = _build_coordinator()
     coordinator._creditos_ledger = [coordinator_module.CreditoEntry("2026-03", 80.0)]

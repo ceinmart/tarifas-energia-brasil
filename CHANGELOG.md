@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.1.0 - 2026-04-26
+
+### Alterado
+
+- Promovida a integracao para a primeira release oficial `0.1.0`.
+
+### Corrigido
+
+- Leituras temporariamente indisponiveis (`unknown`, `unavailable` ou ausentes) das entidades acumuladas deixam de ser convertidas para `0.0`, evitando falso reset no boot do Home Assistant.
+- O consumo, geracao e injecao mantem a ultima referencia valida quando uma entidade ainda nao carregou, impedindo que a proxima leitura real entre como delta integral e contamine os calculos diario/mensal.
+
+### Testes
+
+- Cobertura adicionada para garantir que uma leitura indisponivel no startup nao altera a referencia incremental nem os acumuladores atuais.
+
 ## 0.1.0-alpha.10 - 2026-04-25
 
 ### Corrigido
