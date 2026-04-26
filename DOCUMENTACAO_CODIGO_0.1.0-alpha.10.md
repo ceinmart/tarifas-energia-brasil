@@ -11,7 +11,7 @@ Este documento e um mapa tecnico para desenvolvedores entenderem como a extensao
 
 Esta versao corrige o calculo do sensor `Fio B final` para respeitar o `ICMS` atualmente aplicado pela regra de faixa mensal. No inicio do ciclo, quando o consumo acumulado ainda estiver na faixa isenta, a expressao do calculo passa a usar `0%` no consumo, evitando projetar a maior faixa de ICMS antes da hora.
 
-O sensor continua expondo atributos de auditoria, incluindo a expressao textual do calculo, Fio B com transicao, TUSD de consumo final, TUSD creditada final, ICMS de consumo, ICMS de compensacao e PIS/COFINS aplicados.
+O sensor continua expondo atributos de auditoria, incluindo a expressao textual do calculo, Fio B com transicao, TUSD de consumo final, TUSD creditada final, ICMS de consumo, ICMS de compensacao e PIS/COFINS aplicados. O sensor `ICMS` tambem passa a expor a expressao que justifica o percentual atual, usando as faixas cadastradas por concessionaria e indicando fallback quando nao houver regra especifica.
 
 ## Visao geral
 

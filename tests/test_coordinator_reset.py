@@ -565,6 +565,8 @@ def test_dynamic_icms_refresh_uses_monthly_consumption_base():
     assert values["icms_consumo_percent"] == pytest.approx(18.0)
     assert values["icms_compensacao_percent"] == pytest.approx(0.0)
     assert "TUSD consumo final" in values["fio_b_calculo_expressao"]
+    assert "250.000 kWh" in values["icms_calculo_expressao"]
+    assert "ICMS aplicado = 18.00%" in values["icms_calculo_expressao"]
 
 
 def test_dynamic_icms_refresh_keeps_fio_b_in_current_icms_range():
@@ -601,3 +603,5 @@ def test_dynamic_icms_refresh_keeps_fio_b_in_current_icms_range():
     assert values["icms_consumo_percent"] == pytest.approx(0.0)
     assert values["fio_b_final_r_kwh"] == pytest.approx(0.12079771902897314)
     assert "(1 - 0.00%)" in values["fio_b_calculo_expressao"]
+    assert "20.000 kWh" in values["icms_calculo_expressao"]
+    assert "ICMS aplicado = 0.00%" in values["icms_calculo_expressao"]

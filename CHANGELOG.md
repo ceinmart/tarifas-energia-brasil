@@ -8,10 +8,11 @@
 
 - `Fio B final` deixa de usar a maior faixa de ICMS como referencia fixa e passa a usar o `ICMS` atualmente aplicado pela regra de faixa mensal.
 - No inicio do ciclo, quando a faixa atual de ICMS ainda for `0%`, a expressao do sensor `Fio B final` passa a refletir `0%` no consumo e na compensacao.
+- O sensor `ICMS` passa a expor atributos com a expressao textual da regra aplicada, consumo mensal apurado e faixas da concessionaria.
 
 ### Testes
 
-- Cobertura adicionada para manter o custo efetivo do Fio B dentro da faixa atual de ICMS.
+- Cobertura adicionada para manter o custo efetivo do Fio B dentro da faixa atual de ICMS e para explicar a regra de ICMS por concessionaria.
 
 ## 0.1.0-alpha.9 - 2026-04-25
 

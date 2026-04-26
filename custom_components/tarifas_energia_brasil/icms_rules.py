@@ -26,6 +26,16 @@ class IcmsRangeRule:
             return True
         return kwh <= self.max_kwh_inclusive
 
+    def describe(self) -> str:
+        """Descreve a faixa de consumo em texto curto."""
+
+        if self.max_kwh_inclusive is None:
+            return f"kWh >= {self.min_kwh_inclusive:.6f}"
+        return (
+            f"{self.min_kwh_inclusive:.6f} <= kWh <= "
+            f"{self.max_kwh_inclusive:.6f}"
+        )
+
 
 ICMS_RULES_BY_CONCESSIONARIA: dict[str, list[IcmsRangeRule]] = {
     # SP residencial (documentacao base): 0-90 isento; 91-200 12%; >200 18%
@@ -78,3 +88,68 @@ def resolve_icms_percent(
 
     return fallback_icms_percent, "fallback_sem_match"
 
+
+def build_icms_calculation_attributes(
+    concessionaria: str,
+    consumo_mensal_kwh: float,
+    fallback_icms_percent: float,
+    icms_aplicado_percent: float,
+    icms_source: str,
+) -> dict[str, float | str | list[str]]:
+    """Monta atributos explicativos do ICMS conforme regra da concessionaria."""
+
+    normalized = (concessionaria or "").strip().upper()
+    rules = ICMS_RULES_BY_CONCESSIONARIA.get(normalized)
+    attrs: dict[str, float | str | list[str]] = {
+        "icms_consumo_mensal_kwh": consumo_mensal_kwh,
+        "icms_fallback_percent": fallback_icms_percent,
+        "icms_source": icms_source,
+    }
+
+    if not rules:
+        attrs["icms_calculo_expressao"] = (
+            f"{normalized or 'Concessionaria'} sem regra de faixa cadastrada; "
+            f"ICMS aplicado = fallback da fonte de tributos "
+            f"{fallback_icms_percent:.2f}%."
+        )
+        attrs["icms_regra_faixas"] = []
+        return attrs
+
+    attrs["icms_regra_faixas"] = [
+        f"{rule.describe()} => {rule.icms_percent:.2f}%"
+        for rule in rules
+    ]
+
+    if icms_source == "fallback_bootstrap_sem_historico":
+        attrs["icms_calculo_expressao"] = (
+            "Sem historico de consumo mensal apurado no bootstrap; "
+            f"ICMS aplicado = fallback da fonte de tributos "
+            f"{fallback_icms_percent:.2f}%."
+        )
+        return attrs
+
+    if icms_source.startswith("fallback"):
+        attrs["icms_calculo_expressao"] = (
+            f"Nao foi possivel resolver faixa para consumo mensal "
+            f"{consumo_mensal_kwh:.3f} kWh; ICMS aplicado = fallback "
+            f"{fallback_icms_percent:.2f}%."
+        )
+        return attrs
+
+    matching_rule = next(
+        (rule for rule in rules if rule.matches(consumo_mensal_kwh)),
+        None,
+    )
+    if matching_rule is None:
+        attrs["icms_calculo_expressao"] = (
+            f"Consumo mensal apurado {consumo_mensal_kwh:.3f} kWh nao encontrou "
+            f"faixa cadastrada; ICMS aplicado = {icms_aplicado_percent:.2f}%."
+        )
+        return attrs
+
+    attrs["icms_calculo_expressao"] = (
+        f"Consumo mensal apurado {consumo_mensal_kwh:.3f} kWh entra na faixa "
+        f"{matching_rule.describe()} da concessionaria {normalized}; "
+        f"ICMS aplicado = {matching_rule.icms_percent:.2f}%."
+    )
+    return attrs

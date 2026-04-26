@@ -191,7 +191,7 @@ Observacoes:
 | Fio B final | `fio_b_final_r_kwh` | `sensor.fio_b_final` | R$/kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Custo efetivo da compensacao: TUSD consumo final menos TUSD injetada creditada final. Inclui atributos com a expressao do calculo. |
 | PIS | `pis_percent` | `sensor.pis` | % | `measurement` | Sempre | Aliquota da concessionaria/fallback. |
 | COFINS | `cofins_percent` | `sensor.cofins` | % | `measurement` | Sempre | Aliquota da concessionaria/fallback. |
-| ICMS | `icms_percent` | `sensor.icms` | % | `measurement` | Sempre | Pode aplicar regra por faixa mensal. |
+| ICMS | `icms_percent` | `sensor.icms` | % | `measurement` | Sempre | Pode aplicar regra por faixa mensal. Inclui atributos com expressao do calculo, consumo mensal apurado e faixas da concessionaria. |
 | Bandeira vigente | `bandeira_vigente` | `sensor.bandeira_vigente` | texto | sem `state_class` | Sempre | Cor/status da bandeira ativa. |
 | Adicional da bandeira | `adicional_bandeira_r_kwh` | `sensor.adicional_bandeira` | R$/kWh | `measurement` | Sempre | Adicional homologado convertido de R$/MWh. |
 | Indicador taxa minima | `indicador_taxa_minima` | `sensor.indicador_taxa_minima` | texto (`sim`/`nao`) | sem `state_class` | Sempre | Indica se disponibilidade minima foi aplicada no mensal. |

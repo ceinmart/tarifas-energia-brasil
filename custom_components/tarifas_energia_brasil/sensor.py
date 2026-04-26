@@ -550,4 +550,15 @@ class TarifasEnergiaBrasilSensor(
             ):
                 if key in values:
                     attrs[key] = values[key]
+        if self.entity_description.value_key == "icms_percent":
+            values = self.coordinator.data.values
+            for key in (
+                "icms_calculo_expressao",
+                "icms_consumo_mensal_kwh",
+                "icms_regra_faixas",
+                "icms_fallback_percent",
+                "icms_source",
+            ):
+                if key in values:
+                    attrs[key] = values[key]
         return attrs

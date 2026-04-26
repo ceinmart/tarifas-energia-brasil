@@ -60,3 +60,31 @@ def test_icms_fallback_without_rule():
     value, source = icms.resolve_icms_percent("CEMIG-D", 150, 18.0)
     assert value == pytest.approx(18.0)
     assert source == "fallback_sem_regra"
+
+
+def test_icms_calculation_attributes_describe_concessionaria_range():
+    attrs = icms.build_icms_calculation_attributes(
+        concessionaria="CPFL-PIRATINING",
+        consumo_mensal_kwh=20.0,
+        fallback_icms_percent=12.0,
+        icms_aplicado_percent=0.0,
+        icms_source="regra_faixa_consumo",
+    )
+
+    assert "20.000 kWh" in attrs["icms_calculo_expressao"]
+    assert "CPFL-PIRATINING" in attrs["icms_calculo_expressao"]
+    assert "ICMS aplicado = 0.00%" in attrs["icms_calculo_expressao"]
+    assert attrs["icms_regra_faixas"][0] == "0.000000 <= kWh <= 90.000000 => 0.00%"
+
+
+def test_icms_calculation_attributes_describe_unknown_fallback():
+    attrs = icms.build_icms_calculation_attributes(
+        concessionaria="CEMIG-D",
+        consumo_mensal_kwh=150.0,
+        fallback_icms_percent=18.0,
+        icms_aplicado_percent=18.0,
+        icms_source="fallback_sem_regra",
+    )
+
+    assert "sem regra de faixa cadastrada" in attrs["icms_calculo_expressao"]
+    assert attrs["icms_regra_faixas"] == []

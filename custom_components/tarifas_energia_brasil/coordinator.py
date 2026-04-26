@@ -62,7 +62,7 @@ from .credito_ledger import (
     serialize_entries,
     total_credits_kwh,
 )
-from .icms_rules import resolve_icms_percent
+from .icms_rules import build_icms_calculation_attributes, resolve_icms_percent
 from .models import CollectionMetadata, SnapshotCalculo
 from .tarifa_branca_time import (
     POSTOS_TARIFA_BRANCA,
@@ -731,6 +731,15 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         ]
         values["icms_percent"] = icms_aplicado_percent
         values.update(
+            self._icms_explanation_values(
+                concessionaria=concessionaria,
+                consumo_mensal_kwh=consumo_mensal_kwh,
+                fallback_icms_percent=fallback_icms_percent,
+                icms_aplicado_percent=icms_aplicado_percent,
+                icms_source=icms_source,
+            )
+        )
+        values.update(
             self._fio_b_effective_values(
                 fio_b_bruto_r_kwh=float(values.get("fio_b_bruto_r_kwh", 0.0) or 0.0),
                 tusd_convencional_r_kwh=float(
@@ -744,6 +753,24 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             )
         )
         return icms_source
+
+    def _icms_explanation_values(
+        self,
+        concessionaria: str,
+        consumo_mensal_kwh: float,
+        fallback_icms_percent: float,
+        icms_aplicado_percent: float,
+        icms_source: str,
+    ) -> dict[str, float | str | list[str]]:
+        """Monta atributos de calculo do ICMS para publicar no sensor."""
+
+        return build_icms_calculation_attributes(
+            concessionaria=concessionaria,
+            consumo_mensal_kwh=consumo_mensal_kwh,
+            fallback_icms_percent=fallback_icms_percent,
+            icms_aplicado_percent=icms_aplicado_percent,
+            icms_source=icms_source,
+        )
 
     def _fio_b_effective_values(
         self,
@@ -1312,6 +1339,13 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             "pis_percent": tributos_data.pis_percent,
             "cofins_percent": tributos_data.cofins_percent,
             "icms_percent": icms_aplicado_percent,
+            **self._icms_explanation_values(
+                concessionaria=concessionaria,
+                consumo_mensal_kwh=consumo_mensal_kwh,
+                fallback_icms_percent=tributos_data.icms_percent,
+                icms_aplicado_percent=icms_aplicado_percent,
+                icms_source=icms_source,
+            ),
             "bandeira_vigente": bandeira_data["bandeira"],
             "adicional_bandeira_r_kwh": bandeira_data["adicional_r_kwh"],
             "indicador_taxa_minima": consumo_periodos[BREAKDOWN_MONTHLY] < disponibilidade_kwh,
