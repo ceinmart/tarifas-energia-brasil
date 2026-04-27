@@ -339,6 +339,7 @@ def calcular_scee_creditos_prioritarios(
     tarifa_convencional_final_r_kwh: float,
     fio_b_final_r_kwh: float,
     valor_disponibilidade: float,
+    disponibilidade_kwh: float = 0.0,
 ) -> dict[str, float]:
     """Calcula SCEE consumindo creditos antigos antes da geracao nova."""
 
@@ -352,6 +353,10 @@ def calcular_scee_creditos_prioritarios(
     credito_consumido = min(credito_entrada, energia_compensada)
     geracao_consumida = min(geracao, max(energia_compensada - credito_consumido, 0.0))
     energia_nao_compensada = max(consumo - energia_compensada, 0.0)
+    kwh_adicionados_disponibilidade = max(
+        max(disponibilidade_kwh, 0.0) - energia_nao_compensada,
+        0.0,
+    )
 
     valor_energia_nao_compensada = energia_nao_compensada * tarifa_convencional_final_r_kwh
     valor_fio_b_compensada = energia_compensada * fio_b_final_r_kwh
@@ -360,14 +365,17 @@ def calcular_scee_creditos_prioritarios(
         valor_disponibilidade, valor_consumo_scee
     )
 
-    credito_gerado = max(geracao - geracao_consumida, 0.0)
+    credito_gerado_energia = max(geracao - geracao_consumida, 0.0)
+    credito_gerado = credito_gerado_energia + kwh_adicionados_disponibilidade
 
     return {
         "energia_disponivel_para_compensar_kwh": energia_disponivel,
         "energia_compensada_kwh": energia_compensada,
         "energia_nao_compensada_kwh": energia_nao_compensada,
+        "kwh_adicionados_disponibilidade": kwh_adicionados_disponibilidade,
         "credito_consumido_kwh": credito_consumido,
         "geracao_consumida_kwh": geracao_consumida,
+        "credito_gerado_energia_kwh": credito_gerado_energia,
         "valor_energia_nao_compensada": valor_energia_nao_compensada,
         "valor_fio_b_compensada": valor_fio_b_compensada,
         "valor_consumo_scee": valor_consumo_scee,

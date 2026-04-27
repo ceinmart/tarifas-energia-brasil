@@ -6,10 +6,11 @@ Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de
 
 ## Status
 
-- Versao atual: `0.1.0` (release oficial).
+- Versao atual: `0.1.1` (release oficial).
 - Escopo inicial: base funcional da integracao + MVP com concessionarias suportadas.
 - Concessionaria obrigatoria do MVP: `CPFL-PIRATINING`.
 - Documentacao tecnica de referencia: [DOCUMENTACAO_CODIGO_0.1.0-alpha.10.md](./DOCUMENTACAO_CODIGO_0.1.0-alpha.10.md).
+- Historico completo de mudancas: [CHANGELOG](./CHANGELOG.md).
 
 ## Instalacao (HACS)
 
@@ -169,49 +170,52 @@ Observacoes:
 - Atualmente nao ha sensores com `state_class` `total` ou `total_increasing` nesta integracao.
 - Alguns sensores tecnicos ficam na categoria `diagnostic` para reduzir poluicao visual no device.
 
-| Nome amigavel | Chave interna (`value_key`) | ID sugerido | Unidade | Tipo HA (`state_class`) | Condicao de criacao | Observacao |
+| Nome amigavel | Chave interna (`value_key`) | ID sugerido | Unidade | Tipo HA (`state_class`) | Condicao de criacao | Calculo, origem ou regra resumida |
 |---|---|---|---|---|---|---|
-| TE convencional | `te_convencional_r_kwh` | `sensor.te_convencional` | R$/kWh | `measurement` | Sempre | Coletado da ANEEL e convertido para R$/kWh. |
-| TUSD convencional | `tusd_convencional_r_kwh` | `sensor.tusd_convencional` | R$/kWh | `measurement` | Sempre | Coletado da ANEEL e convertido para R$/kWh. |
-| Tarifa convencional bruta | `tarifa_convencional_bruta_r_kwh` | `sensor.tarifa_convencional_bruta` | R$/kWh | `measurement` | Sempre | `TE + TUSD`. |
-| Tarifa convencional final | `tarifa_convencional_final_r_kwh` | `sensor.tarifa_convencional_final` | R$/kWh | `measurement` | Sempre | Com tributos por dentro. |
-| TE branca fora ponta | `te_branca_fora_ponta_r_kwh` | `sensor.te_branca_fora_ponta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | Parcela TE por posto. |
-| TUSD branca fora ponta | `tusd_branca_fora_ponta_r_kwh` | `sensor.tusd_branca_fora_ponta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | Parcela TUSD por posto. |
-| Tarifa branca fora ponta bruta | `tarifa_branca_fora_ponta_bruta_r_kwh` | `sensor.tarifa_branca_fora_ponta_bruta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | `TE + TUSD` fora ponta. |
-| Tarifa branca fora ponta final | `tarifa_branca_fora_ponta_final_r_kwh` | `sensor.tarifa_branca_fora_ponta_final` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | Com tributos por dentro. |
-| TE branca intermediario | `te_branca_intermediario_r_kwh` | `sensor.te_branca_intermediario` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | Parcela TE por posto. |
-| TUSD branca intermediario | `tusd_branca_intermediario_r_kwh` | `sensor.tusd_branca_intermediario` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | Parcela TUSD por posto. |
-| Tarifa branca intermediario bruta | `tarifa_branca_intermediario_bruta_r_kwh` | `sensor.tarifa_branca_intermediario_bruta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | `TE + TUSD` intermediario. |
-| Tarifa branca intermediario final | `tarifa_branca_intermediario_final_r_kwh` | `sensor.tarifa_branca_intermediario_final` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | Com tributos por dentro. |
-| TE branca ponta | `te_branca_ponta_r_kwh` | `sensor.te_branca_ponta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | Parcela TE por posto. |
-| TUSD branca ponta | `tusd_branca_ponta_r_kwh` | `sensor.tusd_branca_ponta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | Parcela TUSD por posto. |
-| Tarifa branca ponta bruta | `tarifa_branca_ponta_bruta_r_kwh` | `sensor.tarifa_branca_ponta_bruta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | `TE + TUSD` ponta. |
-| Tarifa branca ponta final | `tarifa_branca_ponta_final_r_kwh` | `sensor.tarifa_branca_ponta_final` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | Com tributos por dentro. |
-| Fio B bruto | `fio_b_bruto_r_kwh` | `sensor.fio_b_bruto` | R$/kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `TUSD_FioB / 1000`. |
-| Fio B final | `fio_b_final_r_kwh` | `sensor.fio_b_final` | R$/kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Custo efetivo da compensacao: TUSD consumo final menos TUSD injetada creditada final. Inclui atributos com a expressao do calculo. |
-| PIS | `pis_percent` | `sensor.pis` | % | `measurement` | Sempre | Aliquota da concessionaria/fallback. |
-| COFINS | `cofins_percent` | `sensor.cofins` | % | `measurement` | Sempre | Aliquota da concessionaria/fallback. |
-| ICMS | `icms_percent` | `sensor.icms` | % | `measurement` | Sempre | Pode aplicar regra por faixa mensal. Inclui atributos com expressao do calculo, consumo mensal apurado e faixas da concessionaria. |
-| Bandeira vigente | `bandeira_vigente` | `sensor.bandeira_vigente` | texto | sem `state_class` | Sempre | Cor/status da bandeira ativa. |
-| Adicional da bandeira | `adicional_bandeira_r_kwh` | `sensor.adicional_bandeira` | R$/kWh | `measurement` | Sempre | Adicional homologado convertido de R$/MWh. |
-| Indicador taxa minima | `indicador_taxa_minima` | `sensor.indicador_taxa_minima` | texto (`sim`/`nao`) | sem `state_class` | Sempre | Indica se disponibilidade minima foi aplicada no mensal. |
-| kWh adicionados para disponibilidade | `kwh_adicionados_disponibilidade` | `sensor.kwh_adicionados_para_disponibilidade` | kWh | `measurement` | Sempre | Diferenca para atingir disponibilidade minima. |
-| Saldo de creditos do mes anterior | `saldo_creditos_mes_anterior_kwh` | `sensor.saldo_creditos_do_mes_anterior` | kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
-| Previsao de creditos gerados | `previsao_creditos_gerados_kwh` | `sensor.previsao_de_creditos_gerados` | kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Usa injecao acumulada quando configurada. |
-| Auto-consumo | `auto_consumo_kwh` | `sensor.auto_consumo` | kWh | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Usa `geracao - injecao` quando a entidade de injecao existe. |
-| Auto-consumo em reais | `auto_consumo_reais` | `sensor.auto_consumo_em_reais` | R$ | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Auto-consumo vezes tarifa convencional final. |
-| Valor conta consumo regular diario | `valor_conta_consumo_regular_daily_r` | `sensor.valor_conta_consumo_regular_diario` | R$ | `measurement` | Quando `daily` estiver habilitado | Sensor dinamico por quebra de periodo. |
-| Valor conta consumo regular semanal | `valor_conta_consumo_regular_weekly_r` | `sensor.valor_conta_consumo_regular_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado | Sensor dinamico por quebra de periodo. |
-| Valor conta consumo regular mensal | `valor_conta_consumo_regular_monthly_r` | `sensor.valor_conta_consumo_regular_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado | Sensor dinamico por quebra de periodo. |
-| Valor conta tarifa branca diario | `valor_conta_tarifa_branca_daily_r` | `sensor.valor_conta_tarifa_branca_diario` | R$ | `measurement` | Quando `daily` estiver habilitado e o grupo `Tarifa Branca` estiver habilitado | Sensor dinamico por quebra de periodo. |
-| Valor conta tarifa branca semanal | `valor_conta_tarifa_branca_weekly_r` | `sensor.valor_conta_tarifa_branca_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado e o grupo `Tarifa Branca` estiver habilitado | Sensor dinamico por quebra de periodo. |
-| Valor conta tarifa branca mensal | `valor_conta_tarifa_branca_monthly_r` | `sensor.valor_conta_tarifa_branca_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado e o grupo `Tarifa Branca` estiver habilitado | Sensor dinamico por quebra de periodo. |
-| Valor conta com geracao diario | `valor_conta_com_geracao_daily_r` | `sensor.valor_conta_com_geracao_diario` | R$ | `measurement` | Quando `daily` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
-| Valor conta com geracao semanal | `valor_conta_com_geracao_weekly_r` | `sensor.valor_conta_com_geracao_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
-| Valor conta com geracao mensal | `valor_conta_com_geracao_monthly_r` | `sensor.valor_conta_com_geracao_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Sem o grupo de geracao esse sensor nao e criado. |
-| Valor Fio B compensada diario | `valor_fio_b_compensada_daily_r` | `sensor.valor_fio_b_compensada_diario` | R$ | `measurement` | Quando `daily` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Usa energia compensada apurada pelo SCEE. |
-| Valor Fio B compensada semanal | `valor_fio_b_compensada_weekly_r` | `sensor.valor_fio_b_compensada_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Usa energia compensada apurada pelo SCEE. |
-| Valor Fio B compensada mensal | `valor_fio_b_compensada_monthly_r` | `sensor.valor_fio_b_compensada_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Usa energia compensada apurada pelo SCEE. |
+| TE convencional | `te_convencional_r_kwh` | `sensor.te_convencional` | R$/kWh | `measurement` | Sempre | `VlrTUSD_TE` da ANEEL para modalidade convencional, convertido para R$/kWh quando a origem vier em R$/MWh. |
+| TUSD convencional | `tusd_convencional_r_kwh` | `sensor.tusd_convencional` | R$/kWh | `measurement` | Sempre | `VlrTUSD` da ANEEL para modalidade convencional, convertido para R$/kWh quando necessario. |
+| Tarifa convencional bruta | `tarifa_convencional_bruta_r_kwh` | `sensor.tarifa_convencional_bruta` | R$/kWh | `measurement` | Sempre | `te_convencional_r_kwh + tusd_convencional_r_kwh`. |
+| Tarifa convencional final | `tarifa_convencional_final_r_kwh` | `sensor.tarifa_convencional_final` | R$/kWh | `measurement` | Sempre | `tarifa_convencional_bruta / (1 - PIS - COFINS - ICMS)`, com aliquotas em decimal. |
+| TE branca fora ponta | `te_branca_fora_ponta_r_kwh` | `sensor.te_branca_fora_ponta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | TE ANEEL da modalidade branca no posto `fora_ponta`, em R$/kWh. |
+| TUSD branca fora ponta | `tusd_branca_fora_ponta_r_kwh` | `sensor.tusd_branca_fora_ponta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | TUSD ANEEL da modalidade branca no posto `fora_ponta`, em R$/kWh. |
+| Tarifa branca fora ponta bruta | `tarifa_branca_fora_ponta_bruta_r_kwh` | `sensor.tarifa_branca_fora_ponta_bruta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | `te_branca_fora_ponta_r_kwh + tusd_branca_fora_ponta_r_kwh`. |
+| Tarifa branca fora ponta final | `tarifa_branca_fora_ponta_final_r_kwh` | `sensor.tarifa_branca_fora_ponta_final` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | `tarifa_branca_fora_ponta_bruta / (1 - PIS - COFINS - ICMS)`. |
+| TE branca intermediario | `te_branca_intermediario_r_kwh` | `sensor.te_branca_intermediario` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | TE ANEEL da modalidade branca no posto `intermediario`, em R$/kWh. |
+| TUSD branca intermediario | `tusd_branca_intermediario_r_kwh` | `sensor.tusd_branca_intermediario` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | TUSD ANEEL da modalidade branca no posto `intermediario`, em R$/kWh. |
+| Tarifa branca intermediario bruta | `tarifa_branca_intermediario_bruta_r_kwh` | `sensor.tarifa_branca_intermediario_bruta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | `te_branca_intermediario_r_kwh + tusd_branca_intermediario_r_kwh`. |
+| Tarifa branca intermediario final | `tarifa_branca_intermediario_final_r_kwh` | `sensor.tarifa_branca_intermediario_final` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | `tarifa_branca_intermediario_bruta / (1 - PIS - COFINS - ICMS)`. |
+| TE branca ponta | `te_branca_ponta_r_kwh` | `sensor.te_branca_ponta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | TE ANEEL da modalidade branca no posto `ponta`, em R$/kWh. |
+| TUSD branca ponta | `tusd_branca_ponta_r_kwh` | `sensor.tusd_branca_ponta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | TUSD ANEEL da modalidade branca no posto `ponta`, em R$/kWh. |
+| Tarifa branca ponta bruta | `tarifa_branca_ponta_bruta_r_kwh` | `sensor.tarifa_branca_ponta_bruta` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | `te_branca_ponta_r_kwh + tusd_branca_ponta_r_kwh`. |
+| Tarifa branca ponta final | `tarifa_branca_ponta_final_r_kwh` | `sensor.tarifa_branca_ponta_final` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | `tarifa_branca_ponta_bruta / (1 - PIS - COFINS - ICMS)`. |
+| Fio B bruto | `fio_b_bruto_r_kwh` | `sensor.fio_b_bruto` | R$/kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `TUSD_FioB_r_mwh / 1000`. |
+| Fio B final | `fio_b_final_r_kwh` | `sensor.fio_b_final` | R$/kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Custo efetivo da compensacao: `TUSD_consumo_final - TUSD_credito_final`; atributos mostram a expressao completa. |
+| PIS | `pis_percent` | `sensor.pis` | % | `measurement` | Sempre | Aliquota mensal coletada da concessionaria; fallback local quando a coleta falha. |
+| COFINS | `cofins_percent` | `sensor.cofins` | % | `measurement` | Sempre | Aliquota mensal coletada da concessionaria; fallback local quando a coleta falha. |
+| ICMS | `icms_percent` | `sensor.icms` | % | `measurement` | Sempre | Aliquota por faixa: usa `max(consumo_mensal_kwh, disponibilidade_minima_kwh)` quando ha regra da concessionaria; caso contrario usa fallback. |
+| Bandeira vigente | `bandeira_vigente` | `sensor.bandeira_vigente` | texto | sem `state_class` | Sempre | Nome/cor da bandeira ativa na competencia retornada pela ANEEL. |
+| Adicional da bandeira | `adicional_bandeira_r_kwh` | `sensor.adicional_bandeira` | R$/kWh | `measurement` | Sempre | `adicional_bandeira_r_mwh / 1000`; aplicado sobre kWh faturado nos valores de conta. |
+| Indicador taxa minima | `indicador_taxa_minima` | `sensor.indicador_taxa_minima` | texto (`sim`/`nao`) | sem `state_class` | Sempre | `sim` quando `consumo_mensal_kwh < disponibilidade_minima_kwh` (`30`, `50` ou `100`). |
+| kWh adicionados para disponibilidade | `kwh_adicionados_disponibilidade` | `sensor.kwh_adicionados_para_disponibilidade` | kWh | `measurement` | Sempre | Para indicador geral: `max(disponibilidade_minima_kwh - consumo_mensal_kwh, 0)`. No SCEE, o credito usa a sobra apos compensacao. |
+| Saldo de creditos do mes anterior | `saldo_creditos_mes_anterior_kwh` | `sensor.saldo_creditos_do_mes_anterior` | kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Soma do ledger persistido de creditos em kWh, consumindo primeiro os creditos mais antigos e expirando em 60 meses. |
+| Previsao de creditos gerados | `previsao_creditos_gerados_kwh` | `sensor.previsao_de_creditos_gerados` | kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `max(saldo_anterior - credito_consumido + credito_energia + credito_disponibilidade, 0)`, onde `credito_disponibilidade = max(minimo_kwh - energia_nao_compensada, 0)`. |
+| Auto-consumo | `auto_consumo_kwh` | `sensor.auto_consumo` | kWh | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Com injecao configurada: `max(geracao_total - injecao_total, 0)`; sem injecao, usa estimativa por geracao e credito de energia. |
+| Auto-consumo em reais | `auto_consumo_reais` | `sensor.auto_consumo_em_reais` | R$ | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | `auto_consumo_kwh * tarifa_convencional_final_r_kwh`. |
+| Valor conta consumo regular diario | `valor_conta_consumo_regular_daily_r` | `sensor.valor_conta_consumo_regular_diario` | R$ | `measurement` | Quando `daily` estiver habilitado | `consumo_diario_kwh * (tarifa_convencional_final + adicional_bandeira)`. |
+| Valor conta consumo regular semanal | `valor_conta_consumo_regular_weekly_r` | `sensor.valor_conta_consumo_regular_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado | `consumo_semanal_kwh * (tarifa_convencional_final + adicional_bandeira)`. |
+| Valor conta consumo regular mensal | `valor_conta_consumo_regular_monthly_r` | `sensor.valor_conta_consumo_regular_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado | `max(valor_disponibilidade, consumo_mensal_kwh * (tarifa_convencional_final + adicional_bandeira))`. |
+| Valor consumo regular mensal sem disponibilidade | `valor_conta_consumo_regular_sem_disponibilidade_monthly_r` | `sensor.valor_consumo_regular_mensal_sem_disponibilidade` | R$ | `measurement` | Quando `monthly` estiver habilitado | Valor regular puro: `consumo_mensal_kwh * (tarifa_convencional_final + adicional_bandeira)`, sem aplicar minimo. |
+| Valor conta tarifa branca diario | `valor_conta_tarifa_branca_daily_r` | `sensor.valor_conta_tarifa_branca_diario` | R$ | `measurement` | Quando `daily` estiver habilitado e o grupo `Tarifa Branca` estiver habilitado | Soma por posto: `fora_ponta*tarifa_fp + intermediario*tarifa_int + ponta*tarifa_ponta + consumo_total*adicional_bandeira`. |
+| Valor conta tarifa branca semanal | `valor_conta_tarifa_branca_weekly_r` | `sensor.valor_conta_tarifa_branca_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado e o grupo `Tarifa Branca` estiver habilitado | Mesma formula por posto, usando acumuladores semanais rateados por horario/posto. |
+| Valor conta tarifa branca mensal | `valor_conta_tarifa_branca_monthly_r` | `sensor.valor_conta_tarifa_branca_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado e o grupo `Tarifa Branca` estiver habilitado | `max(valor_disponibilidade, valor_tarifa_branca_mensal_por_posto)`. |
+| Valor tarifa branca mensal sem disponibilidade | `valor_conta_tarifa_branca_sem_disponibilidade_monthly_r` | `sensor.valor_tarifa_branca_mensal_sem_disponibilidade` | R$ | `measurement` | Quando `monthly` e `Tarifa Branca` estiverem habilitados | Valor mensal por posto sem aplicar `max(valor_disponibilidade, ...)`. |
+| Valor conta com geracao diario | `valor_conta_com_geracao_daily_r` | `sensor.valor_conta_com_geracao_diario` | R$ | `measurement` | Quando `daily` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | SCEE diario sem disponibilidade: `energia_nao_compensada*tarifa_final + energia_compensada*fio_b_final`. |
+| Valor conta com geracao semanal | `valor_conta_com_geracao_weekly_r` | `sensor.valor_conta_com_geracao_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Mesma formula SCEE usando acumuladores semanais. |
+| Valor conta com geracao mensal | `valor_conta_com_geracao_monthly_r` | `sensor.valor_conta_com_geracao_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `max(valor_disponibilidade, energia_nao_compensada*tarifa_final + energia_compensada*fio_b_final)`. |
+| Valor conta com geracao mensal sem disponibilidade | `valor_conta_com_geracao_sem_disponibilidade_monthly_r` | `sensor.valor_conta_com_geracao_mensal_sem_disponibilidade` | R$ | `measurement` | Quando `monthly` e `Geracao/SCEE` estiverem habilitados | Valor SCEE puro: `energia_nao_compensada*tarifa_final + energia_compensada*fio_b_final`, sem minimo. |
+| Valor Fio B compensada diario | `valor_fio_b_compensada_daily_r` | `sensor.valor_fio_b_compensada_diario` | R$ | `measurement` | Quando `daily` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `energia_compensada_diaria_kwh * fio_b_final_r_kwh`. |
+| Valor Fio B compensada semanal | `valor_fio_b_compensada_weekly_r` | `sensor.valor_fio_b_compensada_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `energia_compensada_semanal_kwh * fio_b_final_r_kwh`. |
+| Valor Fio B compensada mensal | `valor_fio_b_compensada_monthly_r` | `sensor.valor_fio_b_compensada_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `energia_compensada_mensal_kwh * fio_b_final_r_kwh`. |
 
 ## Calculos detalhados
 
@@ -230,16 +234,24 @@ Observacoes:
      - feriados nacionais e feriados extras como `fora ponta`
 4. Tributos por dentro:
    - `valor_com_tributos = valor_sem_tributos / (1 - pis - cofins - icms)`
-   - o `ICMS` aplicado pode ser ajustado por faixa de consumo mensal para concessionarias com regra mapeada
+   - o `ICMS` aplicado pode ser ajustado por faixa para concessionarias com regra mapeada
+   - a base de faixa do ICMS usa `max(consumo_mensal_kwh, disponibilidade_minima_kwh)`
 5. Bandeira:
    - `valor_bandeira = kwh_faturado * adicional_bandeira_r_kwh`
 6. Disponibilidade:
    - minimo por fornecimento: `30/50/100 kWh`
    - `valor_faturado = max(valor_disponibilidade, valor_calculado)`
+   - `valor_disponibilidade = disponibilidade_minima_kwh * tarifa_convencional_final`
 7. Fio B:
    - `fio_b_bruto = tusd_fio_b_r_mwh / 1000`
    - `fio_b_final = aplicar_tributos_por_dentro(fio_b_bruto * percentual_ano, ...)`
-8. SCEE (modelo inicial):
+8. SCEE:
+   - `energia_compensada = min(consumo, saldo_creditos + energia_nova)`
+   - `energia_nao_compensada = max(consumo - energia_compensada, 0)`
+   - `credito_consumido = min(saldo_creditos, energia_compensada)`
+   - `credito_energia = max(energia_nova - energia_nova_consumida, 0)`
+   - `credito_disponibilidade = max(disponibilidade_minima_kwh - energia_nao_compensada, 0)`
+   - `previsao_creditos = max(saldo_creditos - credito_consumido + credito_energia + credito_disponibilidade, 0)`
    - `valor_consumo_scee = valor_energia_nao_compensada + valor_fio_b_compensada`
    - `valor_consumo_faturado = max(valor_disponibilidade, valor_consumo_scee)`
    - consumo, geracao e injecao acumulados agora sao apurados de forma incremental no tempo, com rateio por virada de dia/semana/ciclo mensal

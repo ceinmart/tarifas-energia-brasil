@@ -95,16 +95,26 @@ def build_icms_calculation_attributes(
     fallback_icms_percent: float,
     icms_aplicado_percent: float,
     icms_source: str,
+    consumo_faturavel_kwh: float | None = None,
+    disponibilidade_minima_kwh: float | None = None,
 ) -> dict[str, float | str | list[str]]:
     """Monta atributos explicativos do ICMS conforme regra da concessionaria."""
 
     normalized = (concessionaria or "").strip().upper()
+    faixa_kwh = (
+        consumo_mensal_kwh
+        if consumo_faturavel_kwh is None
+        else consumo_faturavel_kwh
+    )
     rules = ICMS_RULES_BY_CONCESSIONARIA.get(normalized)
     attrs: dict[str, float | str | list[str]] = {
         "icms_consumo_mensal_kwh": consumo_mensal_kwh,
+        "icms_consumo_faturavel_kwh": faixa_kwh,
         "icms_fallback_percent": fallback_icms_percent,
         "icms_source": icms_source,
     }
+    if disponibilidade_minima_kwh is not None:
+        attrs["icms_disponibilidade_minima_kwh"] = disponibilidade_minima_kwh
 
     if not rules:
         attrs["icms_calculo_expressao"] = (
@@ -131,24 +141,27 @@ def build_icms_calculation_attributes(
     if icms_source.startswith("fallback"):
         attrs["icms_calculo_expressao"] = (
             f"Nao foi possivel resolver faixa para consumo mensal "
-            f"{consumo_mensal_kwh:.3f} kWh; ICMS aplicado = fallback "
+            f"{consumo_mensal_kwh:.3f} kWh e base faturavel "
+            f"{faixa_kwh:.3f} kWh; ICMS aplicado = fallback "
             f"{fallback_icms_percent:.2f}%."
         )
         return attrs
 
     matching_rule = next(
-        (rule for rule in rules if rule.matches(consumo_mensal_kwh)),
+        (rule for rule in rules if rule.matches(faixa_kwh)),
         None,
     )
     if matching_rule is None:
         attrs["icms_calculo_expressao"] = (
-            f"Consumo mensal apurado {consumo_mensal_kwh:.3f} kWh nao encontrou "
+            f"Base faturavel ICMS {faixa_kwh:.3f} kWh, a partir do consumo "
+            f"mensal apurado {consumo_mensal_kwh:.3f} kWh, nao encontrou "
             f"faixa cadastrada; ICMS aplicado = {icms_aplicado_percent:.2f}%."
         )
         return attrs
 
     attrs["icms_calculo_expressao"] = (
-        f"Consumo mensal apurado {consumo_mensal_kwh:.3f} kWh entra na faixa "
+        f"Consumo mensal apurado {consumo_mensal_kwh:.3f} kWh; base faturavel "
+        f"para ICMS {faixa_kwh:.3f} kWh entra na faixa "
         f"{matching_rule.describe()} da concessionaria {normalized}; "
         f"ICMS aplicado = {matching_rule.icms_percent:.2f}%."
     )

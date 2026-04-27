@@ -614,6 +614,7 @@ def test_dynamic_icms_refresh_uses_monthly_consumption_base():
         values=values,
         concessionaria="CPFL-PIRATINING",
         consumo_mensal_kwh=250.0,
+        tipo_fornecimento="trifasico",
         fallback_icms_percent=12.0,
         has_consumo_history=True,
         reference_date=datetime(2026, 4, 24, tzinfo=UTC).date(),
@@ -656,6 +657,7 @@ def test_dynamic_icms_refresh_keeps_fio_b_in_current_icms_range():
         values=values,
         concessionaria="CPFL-PIRATINING",
         consumo_mensal_kwh=20.0,
+        tipo_fornecimento="monofasico",
         fallback_icms_percent=12.0,
         has_consumo_history=True,
         reference_date=datetime(2026, 4, 24, tzinfo=UTC).date(),
@@ -668,3 +670,42 @@ def test_dynamic_icms_refresh_keeps_fio_b_in_current_icms_range():
     assert "(1 - 0.00%)" in values["fio_b_calculo_expressao"]
     assert "20.000 kWh" in values["icms_calculo_expressao"]
     assert "ICMS aplicado = 0.00%" in values["icms_calculo_expressao"]
+
+
+def test_dynamic_icms_refresh_uses_triphase_minimum_for_range():
+    coordinator = _build_coordinator()
+    values = {
+        "te_convencional_r_kwh": 0.34405,
+        "tusd_convencional_r_kwh": 0.39564,
+        "tarifa_convencional_bruta_r_kwh": 0.73969,
+        "tarifa_convencional_final_r_kwh": 0.0,
+        "te_branca_fora_ponta_r_kwh": 0.32816,
+        "tusd_branca_fora_ponta_r_kwh": 0.29282,
+        "te_branca_intermediario_r_kwh": 0.32816,
+        "tusd_branca_intermediario_r_kwh": 0.51559,
+        "te_branca_ponta_r_kwh": 0.51884,
+        "tusd_branca_ponta_r_kwh": 0.73837,
+        "fio_b_bruto_r_kwh": 0.189008164374,
+        "fio_b_final_r_kwh": 0.0,
+        "pis_percent": 1.10,
+        "cofins_percent": 5.02,
+        "icms_percent": 0.0,
+    }
+
+    source = coordinator._refresh_icms_dependent_values(
+        values=values,
+        concessionaria="CPFL-PIRATINING",
+        consumo_mensal_kwh=20.0,
+        tipo_fornecimento="trifasico",
+        fallback_icms_percent=12.0,
+        has_consumo_history=True,
+        reference_date=datetime(2026, 4, 24, tzinfo=UTC).date(),
+    )
+
+    assert source == "regra_faixa_consumo"
+    assert values["icms_percent"] == pytest.approx(12.0)
+    assert values["icms_consumo_mensal_kwh"] == pytest.approx(20.0)
+    assert values["icms_consumo_faturavel_kwh"] == pytest.approx(100.0)
+    assert values["icms_disponibilidade_minima_kwh"] == pytest.approx(100.0)
+    assert "base faturavel para ICMS 100.000 kWh" in values["icms_calculo_expressao"]
+    assert "ICMS aplicado = 12.00%" in values["icms_calculo_expressao"]

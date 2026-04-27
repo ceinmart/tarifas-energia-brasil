@@ -555,6 +555,8 @@ class TarifasEnergiaBrasilSensor(
             for key in (
                 "icms_calculo_expressao",
                 "icms_consumo_mensal_kwh",
+                "icms_consumo_faturavel_kwh",
+                "icms_disponibilidade_minima_kwh",
                 "icms_regra_faixas",
                 "icms_fallback_percent",
                 "icms_source",

@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.1.1 - 2026-04-26
+
+### Alterado
+
+- Atualizada a documentacao do README para manter a referencia ao CHANGELOG visivel e detalhar, na tabela de entidades, a origem ou formula resumida usada por cada sensor.
+- A selecao de faixa de ICMS passa a considerar a base faturavel minima por tipo de fornecimento (`30/50/100 kWh`) quando ela for maior que o consumo mensal apurado.
+
+### Corrigido
+
+- A previsao de creditos SCEE agora considera a disponibilidade minima depois da compensacao: `credito_disponibilidade = max(disponibilidade_minima_kwh - energia_nao_compensada, 0)`.
+- O credito de disponibilidade foi separado do credito de energia para nao contaminar o calculo de auto-consumo quando a integracao opera sem entidade de injecao.
+
+### Testes
+
+- Cobertura adicionada para creditos de disponibilidade apos compensacao, consumo nao compensado no SCEE e ICMS com minimo trifasico.
+
 ## 0.1.0 - 2026-04-26
 
 ### Alterado

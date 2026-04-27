@@ -390,6 +390,9 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             consumo_mensal_kwh=float(
                 self._consumo_period_state[BREAKDOWN_MONTHLY]["kwh"]
             ),
+            tipo_fornecimento=str(
+                self._effective_value(CONF_SUPPLY_TYPE, SUPPLY_MONOPHASE)
+            ),
             fallback_icms_percent=float(
                 self.data.diagnostics.get(
                     "icms_percent_base_fonte",
@@ -661,16 +664,22 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         values: dict[str, float | str | bool | None],
         concessionaria: str,
         consumo_mensal_kwh: float,
+        tipo_fornecimento: str,
         fallback_icms_percent: float,
         has_consumo_history: bool,
         reference_date: date,
     ) -> str:
-        """Recalcula ICMS e tarifas finais usando o consumo mensal apurado."""
+        """Recalcula ICMS usando o maior valor entre consumo e minimo faturavel."""
 
-        if has_consumo_history or consumo_mensal_kwh > 0:
+        disponibilidade_kwh = disponibilidade_minima_kwh(tipo_fornecimento)
+        consumo_faturavel_kwh = self._icms_consumo_faturavel_kwh(
+            consumo_mensal_kwh=consumo_mensal_kwh,
+            disponibilidade_kwh=disponibilidade_kwh,
+        )
+        if has_consumo_history or consumo_mensal_kwh > 0 or disponibilidade_kwh > 0:
             icms_aplicado_percent, icms_source = resolve_icms_percent(
                 concessionaria=concessionaria,
-                consumo_mensal_kwh=consumo_mensal_kwh,
+                consumo_mensal_kwh=consumo_faturavel_kwh,
                 fallback_icms_percent=fallback_icms_percent,
             )
         else:
@@ -734,6 +743,8 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             self._icms_explanation_values(
                 concessionaria=concessionaria,
                 consumo_mensal_kwh=consumo_mensal_kwh,
+                consumo_faturavel_kwh=consumo_faturavel_kwh,
+                disponibilidade_minima_kwh=disponibilidade_kwh,
                 fallback_icms_percent=fallback_icms_percent,
                 icms_aplicado_percent=icms_aplicado_percent,
                 icms_source=icms_source,
@@ -758,6 +769,8 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         self,
         concessionaria: str,
         consumo_mensal_kwh: float,
+        consumo_faturavel_kwh: float,
+        disponibilidade_minima_kwh: float,
         fallback_icms_percent: float,
         icms_aplicado_percent: float,
         icms_source: str,
@@ -767,10 +780,21 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         return build_icms_calculation_attributes(
             concessionaria=concessionaria,
             consumo_mensal_kwh=consumo_mensal_kwh,
+            consumo_faturavel_kwh=consumo_faturavel_kwh,
+            disponibilidade_minima_kwh=disponibilidade_minima_kwh,
             fallback_icms_percent=fallback_icms_percent,
             icms_aplicado_percent=icms_aplicado_percent,
             icms_source=icms_source,
         )
+
+    @staticmethod
+    def _icms_consumo_faturavel_kwh(
+        consumo_mensal_kwh: float,
+        disponibilidade_kwh: float,
+    ) -> float:
+        """Retorna a base minima de kWh usada para selecionar a faixa de ICMS."""
+
+        return max(consumo_mensal_kwh, disponibilidade_kwh, 0.0)
 
     def _fio_b_effective_values(
         self,
@@ -825,10 +849,14 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             ),
             tarifa_convencional_final_r_kwh=tarifa_conv,
         )
+        disponibilidade_kwh = disponibilidade_minima_kwh(
+            str(self._effective_value(CONF_SUPPLY_TYPE, SUPPLY_MONOPHASE))
+        )
         return {
             "tarifa_convencional_final_r_kwh": tarifa_conv,
             "fio_b_final_r_kwh": fio_b_final,
             "valor_disponibilidade": valor_disponibilidade,
+            "disponibilidade_kwh": disponibilidade_kwh,
         }
 
     def _finalize_monthly_rollovers(
@@ -858,6 +886,9 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                 fio_b_final_r_kwh=float(tariff_context.get("fio_b_final_r_kwh", 0.0)),
                 valor_disponibilidade=float(
                     tariff_context.get("valor_disponibilidade", 0.0)
+                ),
+                disponibilidade_kwh=float(
+                    tariff_context.get("disponibilidade_kwh", 0.0)
                 ),
             )
             if scee["credito_consumido_kwh"] > 0:
@@ -1105,6 +1136,9 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                     valor_disponibilidade=(
                         valor_disponibilidade if period == BREAKDOWN_MONTHLY else 0.0
                     ),
+                    disponibilidade_kwh=(
+                        disponibilidade_kwh if period == BREAKDOWN_MONTHLY else 0.0
+                    ),
                 )
                 values[f"valor_conta_com_geracao_{period}_r"] = scee["valor_consumo_faturado"]
                 values[f"valor_fio_b_compensada_{period}_r"] = scee["valor_fio_b_compensada"]
@@ -1129,7 +1163,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                     else:
                         values["auto_consumo_kwh"] = calcular_auto_consumo_kwh(
                             gerado_kwh=geracao_periodos[period],
-                            injetado_kwh=scee["credito_gerado_kwh"],
+                            injetado_kwh=scee["credito_gerado_energia_kwh"],
                         )
                     values["auto_consumo_reais"] = (
                         float(values["auto_consumo_kwh"]) * tarifa_conv_final
@@ -1275,10 +1309,15 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         )
 
         consumo_mensal_kwh = consumo_periodos[BREAKDOWN_MONTHLY]
-        if had_consumo_history or consumo_mensal_kwh > 0:
+        disponibilidade_kwh = disponibilidade_minima_kwh(tipo_fornecimento)
+        icms_consumo_faturavel_kwh = self._icms_consumo_faturavel_kwh(
+            consumo_mensal_kwh=consumo_mensal_kwh,
+            disponibilidade_kwh=disponibilidade_kwh,
+        )
+        if had_consumo_history or consumo_mensal_kwh > 0 or disponibilidade_kwh > 0:
             icms_aplicado_percent, icms_source = resolve_icms_percent(
                 concessionaria=concessionaria,
-                consumo_mensal_kwh=consumo_mensal_kwh,
+                consumo_mensal_kwh=icms_consumo_faturavel_kwh,
                 fallback_icms_percent=tributos_data.icms_percent,
             )
         else:
@@ -1319,8 +1358,6 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             pis_percent=tributos_data.pis_percent,
             cofins_percent=tributos_data.cofins_percent,
         )
-
-        disponibilidade_kwh = disponibilidade_minima_kwh(tipo_fornecimento)
         ciclo_mensal_atual = self._period_key(BREAKDOWN_MONTHLY, now, reading_day)
         competencia_atual = competencia_from_cycle_key(ciclo_mensal_atual)
         if competencia_atual:
@@ -1369,6 +1406,8 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             **self._icms_explanation_values(
                 concessionaria=concessionaria,
                 consumo_mensal_kwh=consumo_mensal_kwh,
+                consumo_faturavel_kwh=icms_consumo_faturavel_kwh,
+                disponibilidade_minima_kwh=disponibilidade_kwh,
                 fallback_icms_percent=tributos_data.icms_percent,
                 icms_aplicado_percent=icms_aplicado_percent,
                 icms_source=icms_source,
