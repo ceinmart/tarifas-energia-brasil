@@ -1327,7 +1327,22 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             RuntimeError,
             Exception,
         ) as err:
+            retry_interval = self.update_interval or timedelta(
+                hours=self._effective_update_hours()
+            )
+            retry_at = now + retry_interval
             if self.data is not None:
+                _LOGGER.warning(
+                    (
+                        "Coleta de tarifas falhou para %s; mantendo ultimo snapshot "
+                        "valido nos sensores. Proxima tentativa automatica prevista "
+                        "para %s (intervalo=%s). Erro: %s"
+                    ),
+                    self.config_entry.entry_id,
+                    retry_at.isoformat(),
+                    retry_interval,
+                    err,
+                )
                 diagnostics = dict(self.data.diagnostics)
                 diagnostics["mensagem_erro"] = str(err)
                 diagnostics["ultima_falha"] = now.isoformat()
@@ -1339,6 +1354,17 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                     collections_by_key=self.data.collections_by_key,
                     diagnostics=diagnostics,
                 )
+            _LOGGER.error(
+                (
+                    "Coleta inicial de tarifas falhou para %s e nao ha snapshot "
+                    "valido em cache para restaurar sensores. Proxima tentativa "
+                    "automatica prevista para %s (intervalo=%s). Erro: %s"
+                ),
+                self.config_entry.entry_id,
+                retry_at.isoformat(),
+                retry_interval,
+                err,
+            )
             raise UpdateFailed(f"Falha na coleta inicial: {err}") from err
 
         tarifas_data, tarifas_meta = tarifas_result

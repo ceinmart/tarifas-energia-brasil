@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.1.4 - 2026-04-27
+
+### Alterado
+
+- Logs da coleta ANEEL passam a informar quando um fallback foi acionado, qual metodo falhou, qual sera o proximo metodo, quais filtros foram usados e o tipo/mensagem da excecao.
+- Falhas de coleta no coordinator passam a registrar se existe snapshot valido sendo mantido, ou se nao ha cache disponivel, junto com a previsao da proxima tentativa automatica.
+
+### Testes
+
+- Cobertura adicionada para garantir que logs de falha ANEEL incluem filtros e tipo de excecao mesmo quando o erro vem sem mensagem textual.
+
 ## 0.1.3 - 2026-04-27
 
 ### Corrigido

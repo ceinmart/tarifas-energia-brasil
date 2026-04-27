@@ -68,16 +68,23 @@ class AneelClient:
 
         errors: list[str] = []
         methods = get_aneel_method_fallback_order(priority_method)
+        filters = {"SigAgente": concessionaria}
         for attempts, method in enumerate(methods, start=1):
             try:
                 records = await self._collect_resource_records(
                     resource_id=self.RESOURCE_TARIFAS,
                     method=method,
-                    filters={"SigAgente": concessionaria},
+                    filters=filters,
                 )
                 parsed = self._parse_tarifa_records(records, concessionaria, reference_date)
                 if parsed["convencional"]["te_r_kwh"] <= 0 or parsed["convencional"]["tusd_r_kwh"] <= 0:
                     raise AneelClientError("Registros encontrados sem TE/TUSD convencional validos.")
+                self._log_aneel_method_success(
+                    dataset="tarifas",
+                    method=method,
+                    attempts=attempts,
+                    filters=filters,
+                )
 
                 metadata = CollectionMetadata(
                     ultima_coleta=datetime.now().astimezone().isoformat(),
@@ -93,12 +100,20 @@ class AneelClient:
                 )
                 return parsed, metadata
             except (AneelClientError, aiohttp.ClientError, TimeoutError, ValueError) as err:
-                errors.append(f"{method}: {err}")
+                errors.append(f"{method}: {self._describe_exception(err)}")
+                self._log_aneel_method_failure(
+                    dataset="tarifas",
+                    method=method,
+                    next_method=self._next_method(methods, attempts),
+                    filters=filters,
+                    err=err,
+                )
                 continue
 
         raise AneelClientError(
             "Falha ao coletar tarifas ANEEL em todos os metodos. "
-            + " | ".join(errors)
+            f"Filtros usados: {self._format_filters(filters)}. "
+            f"Erros: {' | '.join(errors)}"
         )
 
     async def fetch_fio_b(
@@ -111,6 +126,10 @@ class AneelClient:
 
         errors: list[str] = []
         methods = get_aneel_method_fallback_order(priority_method)
+        filters = {
+            "SigNomeAgente": concessionaria,
+            "DscComponenteTarifario": "TUSD_FioB",
+        }
         for attempts, method in enumerate(methods, start=1):
             try:
                 all_records: list[dict[str, Any]] = []
@@ -118,16 +137,19 @@ class AneelClient:
                     records = await self._collect_resource_records(
                         resource_id=resource_id,
                         method=method,
-                        filters={
-                            "SigNomeAgente": concessionaria,
-                            "DscComponenteTarifario": "TUSD_FioB",
-                        },
+                        filters=filters,
                     )
                     all_records.extend(records)
 
                 parsed = self._parse_fio_b_records(all_records, concessionaria, reference_date)
                 if parsed["convencional_bruto_r_kwh"] <= 0:
                     raise AneelClientError("Fio B convencional nao localizado.")
+                self._log_aneel_method_success(
+                    dataset="componentes-tarifarias/Fio B",
+                    method=method,
+                    attempts=attempts,
+                    filters=filters,
+                )
 
                 metadata = CollectionMetadata(
                     ultima_coleta=datetime.now().astimezone().isoformat(),
@@ -143,11 +165,21 @@ class AneelClient:
                 )
                 return parsed, metadata
             except (AneelClientError, aiohttp.ClientError, TimeoutError, ValueError) as err:
-                errors.append(f"{method}: {err}")
+                errors.append(f"{method}: {self._describe_exception(err)}")
+                self._log_aneel_method_failure(
+                    dataset="componentes-tarifarias/Fio B",
+                    method=method,
+                    next_method=self._next_method(methods, attempts),
+                    filters=filters,
+                    err=err,
+                )
                 continue
 
         raise AneelClientError(
-            "Falha ao coletar Fio B ANEEL em todos os metodos. " + " | ".join(errors)
+            "Falha ao coletar Fio B ANEEL em todos os metodos. "
+            f"Filtros usados: {self._format_filters(filters)}. "
+            f"Recursos: {', '.join(self.RESOURCE_FIO_B_ANOS)}. "
+            f"Erros: {' | '.join(errors)}"
         )
 
     async def fetch_bandeira(
@@ -192,17 +224,32 @@ class AneelClient:
                     tentativas=attempts,
                     confianca_fonte=ATTR_CONFIANCA_ALTA if attempts == 1 else ATTR_CONFIANCA_MEDIA,
                 )
+                self._log_aneel_method_success(
+                    dataset="bandeiras-tarifarias",
+                    method=method,
+                    attempts=attempts,
+                    filters=None,
+                )
                 return {
                     "bandeira": vigencia["bandeira"],
                     "competencia": vigencia["competencia"],
                     "adicional_r_kwh": adicional_r_kwh,
                 }, metadata
             except (AneelClientError, aiohttp.ClientError, TimeoutError, ValueError) as err:
-                errors.append(f"{method}: {err}")
+                errors.append(f"{method}: {self._describe_exception(err)}")
+                self._log_aneel_method_failure(
+                    dataset="bandeiras-tarifarias",
+                    method=method,
+                    next_method=self._next_method(methods, attempts),
+                    filters=None,
+                    err=err,
+                )
                 continue
 
         raise AneelClientError(
-            "Falha ao coletar bandeiras ANEEL em todos os metodos. " + " | ".join(errors)
+            "Falha ao coletar bandeiras ANEEL em todos os metodos. "
+            f"Filtros usados: {self._format_filters(None)}. "
+            f"Erros: {' | '.join(errors)}"
         )
 
     async def _collect_resource_records(
@@ -362,6 +409,85 @@ class AneelClient:
             return str(dialect.delimiter)
         except csv.Error:
             return ";" if header_line.count(";") > header_line.count(",") else ","
+
+    @staticmethod
+    def _next_method(methods: list[str], attempts: int) -> str | None:
+        """Retorna o proximo metodo de fallback, quando existir."""
+
+        if attempts >= len(methods):
+            return None
+        return methods[attempts]
+
+    @staticmethod
+    def _describe_exception(err: BaseException) -> str:
+        """Garante mensagem util mesmo quando a excecao vem sem texto."""
+
+        detail = str(err).strip()
+        if detail:
+            return f"{type(err).__name__}: {detail}"
+        return type(err).__name__
+
+    @staticmethod
+    def _format_filters(filters: dict[str, Any] | None) -> str:
+        """Formata filtros usados nas consultas ANEEL para diagnostico."""
+
+        if not filters:
+            return "sem filtros"
+        return json.dumps(filters, ensure_ascii=False, sort_keys=True)
+
+    def _log_aneel_method_failure(
+        self,
+        *,
+        dataset: str,
+        method: str,
+        next_method: str | None,
+        filters: dict[str, Any] | None,
+        err: BaseException,
+    ) -> None:
+        """Registra falha de metodo ANEEL e eventual entrada em fallback."""
+
+        error_message = self._describe_exception(err)
+        if next_method:
+            _LOGGER.warning(
+                (
+                    "ANEEL fallback acionado para %s: metodo=%s falhou; "
+                    "proximo_metodo=%s; filtros=%s; erro=%s"
+                ),
+                dataset,
+                method,
+                next_method,
+                self._format_filters(filters),
+                error_message,
+            )
+            return
+
+        _LOGGER.error(
+            "ANEEL metodo final falhou para %s: metodo=%s; filtros=%s; erro=%s",
+            dataset,
+            method,
+            self._format_filters(filters),
+            error_message,
+        )
+
+    def _log_aneel_method_success(
+        self,
+        *,
+        dataset: str,
+        method: str,
+        attempts: int,
+        filters: dict[str, Any] | None,
+    ) -> None:
+        """Registra sucesso depois de fallback para facilitar diagnostico."""
+
+        if attempts <= 1:
+            return
+        _LOGGER.warning(
+            "ANEEL fallback concluido para %s: metodo=%s; tentativas=%s; filtros=%s",
+            dataset,
+            method,
+            attempts,
+            self._format_filters(filters),
+        )
 
     def _parse_tarifa_records(
         self,

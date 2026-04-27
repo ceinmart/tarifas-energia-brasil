@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import logging
 import sys
 import types
 from dataclasses import dataclass
@@ -390,6 +391,29 @@ def test_csv_fallback_filters_semicolon_latin1_chunks():
             "VlrComponenteTarifario": "189,008164374",
         }
     ]
+
+
+def test_aneel_failure_log_includes_filters_and_exception_class(caplog):
+    client = AneelClient(session=None)
+    filters = {
+        "SigNomeAgente": "CPFL-PIRATINING",
+        "DscComponenteTarifario": "TUSD_FioB",
+    }
+
+    caplog.set_level(logging.WARNING, logger=aneel_module.__name__)
+    client._log_aneel_method_failure(
+        dataset="componentes-tarifarias/Fio B",
+        method="csv_xml",
+        next_method=None,
+        filters=filters,
+        err=TimeoutError(),
+    )
+
+    message = caplog.text
+    assert "metodo=csv_xml" in message
+    assert '"SigNomeAgente": "CPFL-PIRATINING"' in message
+    assert '"DscComponenteTarifario": "TUSD_FioB"' in message
+    assert "TimeoutError" in message
 
 
 def test_tributos_requests_use_extended_timeout():
