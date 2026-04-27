@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.1.5 - 2026-04-27
+
+### Corrigido
+
+- A coleta de Fio B via CSV passa a processar recursos ano a ano e parar assim que encontrar Fio B convencional vigente com prioridade maxima, evitando baixar todos os CSVs grandes antes de validar o resultado.
+- Falhas em um recurso especifico de Fio B deixam de interromper imediatamente os demais recursos do mesmo metodo, permitindo seguir para o proximo ano quando um CSV falhar ou expirar.
+
+### Alterado
+
+- Logs do fallback CSV passam a indicar inicio do download, tamanho informado pelo servidor, progresso em bytes, fim do stream, linhas lidas e quantidade de registros filtrados.
+
+### Testes
+
+- Cobertura adicionada para garantir que a coleta CSV de Fio B para no primeiro recurso valido e nao baixa recursos antigos desnecessarios.
+
 ## 0.1.4 - 2026-04-27
 
 ### Alterado

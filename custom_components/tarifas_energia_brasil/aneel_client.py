@@ -10,7 +10,9 @@ import codecs
 import csv
 import json
 import logging
+import time
 import unicodedata
+from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any
 
@@ -33,6 +35,8 @@ ANEEL_JSON_TIMEOUT_SECONDS = 120
 ANEEL_CSV_TIMEOUT_SECONDS = 600
 CSV_STREAM_CHUNK_SIZE = 64 * 1024
 CSV_STREAM_ENCODING = "latin-1"
+CSV_PROGRESS_LOG_INTERVAL_SECONDS = 60
+CSV_PROGRESS_LOG_INTERVAL_BYTES = 100 * 1024 * 1024
 
 
 class AneelClientError(Exception):
@@ -133,37 +137,73 @@ class AneelClient:
         for attempts, method in enumerate(methods, start=1):
             try:
                 all_records: list[dict[str, Any]] = []
+                resource_errors: list[str] = []
+                checked_resource_ids: list[str] = []
                 for resource_id in self.RESOURCE_FIO_B_ANOS:
-                    records = await self._collect_resource_records(
-                        resource_id=resource_id,
+                    try:
+                        records = await self._collect_resource_records(
+                            resource_id=resource_id,
+                            method=method,
+                            filters=filters,
+                            early_stop=(
+                                self._build_fio_b_csv_early_stop(
+                                    concessionaria,
+                                    reference_date,
+                                )
+                                if method == ANEEL_METHOD_CSV_XML
+                                else None
+                            ),
+                        )
+                    except (AneelClientError, aiohttp.ClientError, TimeoutError, ValueError) as err:
+                        resource_errors.append(
+                            f"{resource_id}: {self._describe_exception(err)}"
+                        )
+                        self._log_aneel_resource_failure(
+                            dataset="componentes-tarifarias/Fio B",
+                            method=method,
+                            resource_id=resource_id,
+                            filters=filters,
+                            err=err,
+                        )
+                        continue
+
+                    checked_resource_ids.append(resource_id)
+                    all_records.extend(records)
+                    parsed = self._parse_fio_b_records(
+                        all_records,
+                        concessionaria,
+                        reference_date,
+                    )
+                    if parsed["convencional_bruto_r_kwh"] <= 0:
+                        continue
+
+                    self._log_aneel_method_success(
+                        dataset="componentes-tarifarias/Fio B",
                         method=method,
+                        attempts=attempts,
                         filters=filters,
                     )
-                    all_records.extend(records)
 
-                parsed = self._parse_fio_b_records(all_records, concessionaria, reference_date)
-                if parsed["convencional_bruto_r_kwh"] <= 0:
-                    raise AneelClientError("Fio B convencional nao localizado.")
-                self._log_aneel_method_success(
-                    dataset="componentes-tarifarias/Fio B",
-                    method=method,
-                    attempts=attempts,
-                    filters=filters,
-                )
+                    metadata = CollectionMetadata(
+                        ultima_coleta=datetime.now().astimezone().isoformat(),
+                        fonte="dados_abertos_aneel",
+                        dataset="componentes-tarifarias",
+                        resource_id=",".join(checked_resource_ids),
+                        metodo_acesso=method,
+                        usou_fallback=attempts > 1,
+                        tentativas=attempts,
+                        confianca_fonte=(
+                            ATTR_CONFIANCA_ALTA if attempts == 1 else ATTR_CONFIANCA_MEDIA
+                        ),
+                        vigencia_inicio=parsed.get("vigencia_inicio"),
+                        vigencia_fim=parsed.get("vigencia_fim"),
+                    )
+                    return parsed, metadata
 
-                metadata = CollectionMetadata(
-                    ultima_coleta=datetime.now().astimezone().isoformat(),
-                    fonte="dados_abertos_aneel",
-                    dataset="componentes-tarifarias",
-                    resource_id=",".join(self.RESOURCE_FIO_B_ANOS),
-                    metodo_acesso=method,
-                    usou_fallback=attempts > 1,
-                    tentativas=attempts,
-                    confianca_fonte=ATTR_CONFIANCA_ALTA if attempts == 1 else ATTR_CONFIANCA_MEDIA,
-                    vigencia_inicio=parsed.get("vigencia_inicio"),
-                    vigencia_fim=parsed.get("vigencia_fim"),
-                )
-                return parsed, metadata
+                details = f" Recursos verificados: {', '.join(checked_resource_ids) or 'nenhum'}."
+                if resource_errors:
+                    details += f" Erros por recurso: {' | '.join(resource_errors)}."
+                raise AneelClientError(f"Fio B convencional nao localizado.{details}")
             except (AneelClientError, aiohttp.ClientError, TimeoutError, ValueError) as err:
                 errors.append(f"{method}: {self._describe_exception(err)}")
                 self._log_aneel_method_failure(
@@ -257,6 +297,7 @@ class AneelClient:
         resource_id: str,
         method: str,
         filters: dict[str, Any] | None,
+        early_stop: Callable[[list[dict[str, Any]]], bool] | None = None,
     ) -> list[dict[str, Any]]:
         """Consulta registros usando o metodo de acesso selecionado."""
 
@@ -265,7 +306,7 @@ class AneelClient:
         if method == ANEEL_METHOD_DATASTORE_SEARCH_SQL:
             return await self._datastore_search_sql_records(resource_id, filters)
         if method == ANEEL_METHOD_CSV_XML:
-            return await self._csv_xml_records(resource_id, filters)
+            return await self._csv_xml_records(resource_id, filters, early_stop=early_stop)
         raise AneelClientError(f"Metodo ANEEL invalido: {method}")
 
     async def _datastore_search_records(
@@ -326,6 +367,7 @@ class AneelClient:
         self,
         resource_id: str,
         filters: dict[str, Any] | None,
+        early_stop: Callable[[list[dict[str, Any]]], bool] | None = None,
     ) -> list[dict[str, Any]]:
         """Consulta de fallback em CSV/XML usando URL do recurso."""
 
@@ -335,9 +377,36 @@ class AneelClient:
         if not url:
             raise AneelClientError(f"URL do recurso nao encontrada para {resource_id}.")
 
+        _LOGGER.warning(
+            "ANEEL CSV download iniciado: resource_id=%s; url=%s; timeout=%ss; filtros=%s",
+            resource_id,
+            url,
+            ANEEL_CSV_TIMEOUT_SECONDS,
+            self._format_filters(filters),
+        )
+        started_at = time.monotonic()
         async with self._session.get(url, timeout=ANEEL_CSV_TIMEOUT_SECONDS) as response:
             response.raise_for_status()
-            records = await self._filtered_csv_records_from_response(response, filters)
+            response_headers = getattr(response, "headers", None)
+            content_length = response_headers.get("Content-Length") if response_headers else None
+            _LOGGER.warning(
+                "ANEEL CSV resposta recebida: resource_id=%s; content_length=%s",
+                resource_id,
+                content_length or "desconhecido",
+            )
+            records = await self._filtered_csv_records_from_response(
+                response,
+                filters,
+                resource_id=resource_id,
+                early_stop=early_stop,
+            )
+        elapsed = time.monotonic() - started_at
+        _LOGGER.warning(
+            "ANEEL CSV download finalizado: resource_id=%s; registros_filtrados=%s; tempo=%.1fs",
+            resource_id,
+            len(records),
+            elapsed,
+        )
         return records
 
     async def _request_json(self, action: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -359,12 +428,20 @@ class AneelClient:
         self,
         response: Any,
         filters: dict[str, Any] | None,
+        *,
+        resource_id: str | None = None,
+        early_stop: Callable[[list[dict[str, Any]]], bool] | None = None,
     ) -> list[dict[str, Any]]:
         """Filtra CSV em streaming mantendo apenas registros relevantes em memoria."""
 
         records: list[dict[str, Any]] = []
         header: list[str] | None = None
-        async for row in self._iter_csv_rows_from_response(response):
+        rows_seen = 0
+        async for row in self._iter_csv_rows_from_response(
+            response,
+            resource_id=resource_id,
+        ):
+            rows_seen += 1
             if header is None:
                 header = [str(cell) for cell in row]
                 continue
@@ -376,15 +453,64 @@ class AneelClient:
             }
             if self._row_matches_filters(row_dict, filters):
                 records.append(row_dict)
+                if early_stop and early_stop(records):
+                    if resource_id:
+                        _LOGGER.warning(
+                            (
+                                "ANEEL CSV leitura interrompida apos criterio "
+                                "suficiente: resource_id=%s; linhas_lidas=%s; "
+                                "registros_filtrados=%s; filtros=%s"
+                            ),
+                            resource_id,
+                            max(rows_seen - 1, 0),
+                            len(records),
+                            self._format_filters(filters),
+                        )
+                    return records
+        if resource_id:
+            _LOGGER.warning(
+                (
+                    "ANEEL CSV parse finalizado: resource_id=%s; linhas_lidas=%s; "
+                    "registros_filtrados=%s; filtros=%s"
+                ),
+                resource_id,
+                max(rows_seen - 1, 0),
+                len(records),
+                self._format_filters(filters),
+            )
         return records
 
-    async def _iter_csv_rows_from_response(self, response: Any):
+    async def _iter_csv_rows_from_response(
+        self,
+        response: Any,
+        *,
+        resource_id: str | None = None,
+    ):
         """Itera linhas CSV vindas da resposta HTTP sem materializar o arquivo inteiro."""
 
         decoder = codecs.getincrementaldecoder(CSV_STREAM_ENCODING)(errors="replace")
         buffer = ""
         delimiter: str | None = None
+        bytes_read = 0
+        last_log_at = time.monotonic()
+        last_log_bytes = 0
         async for chunk in response.content.iter_chunked(CSV_STREAM_CHUNK_SIZE):
+            bytes_read += len(chunk)
+            now = time.monotonic()
+            if (
+                resource_id
+                and (
+                    now - last_log_at >= CSV_PROGRESS_LOG_INTERVAL_SECONDS
+                    or bytes_read - last_log_bytes >= CSV_PROGRESS_LOG_INTERVAL_BYTES
+                )
+            ):
+                _LOGGER.warning(
+                    "ANEEL CSV download em andamento: resource_id=%s; bytes_baixados=%s",
+                    resource_id,
+                    bytes_read,
+                )
+                last_log_at = now
+                last_log_bytes = bytes_read
             buffer += decoder.decode(chunk)
             while "\n" in buffer:
                 line, buffer = buffer.split("\n", 1)
@@ -399,6 +525,12 @@ class AneelClient:
                 delimiter = self._detect_csv_delimiter(buffer)
             for parsed in csv.reader([buffer], delimiter=delimiter or ","):
                 yield parsed
+        if resource_id:
+            _LOGGER.warning(
+                "ANEEL CSV stream concluido: resource_id=%s; bytes_baixados=%s",
+                resource_id,
+                bytes_read,
+            )
 
     @staticmethod
     def _detect_csv_delimiter(header_line: str) -> str:
@@ -409,6 +541,26 @@ class AneelClient:
             return str(dialect.delimiter)
         except csv.Error:
             return ";" if header_line.count(";") > header_line.count(",") else ","
+
+    def _build_fio_b_csv_early_stop(
+        self,
+        concessionaria: str,
+        reference_date: date,
+    ) -> Callable[[list[dict[str, Any]]], bool]:
+        """Cria criterio para encerrar CSV quando o Fio B convencional ja e suficiente."""
+
+        best_rank = (1, 1, 1, 1, 1, 1)
+
+        def _has_best_conventional(records: list[dict[str, Any]]) -> bool:
+            parsed = self._parse_fio_b_records(records, concessionaria, reference_date)
+            if parsed["convencional_bruto_r_kwh"] <= 0:
+                return False
+            debug = parsed["selection_debug"]["convencional"]
+            if not isinstance(debug, dict):
+                return False
+            return tuple(debug.get("score") or ()) >= best_rank
+
+        return _has_best_conventional
 
     @staticmethod
     def _next_method(methods: list[str], attempts: int) -> str | None:
@@ -467,6 +619,29 @@ class AneelClient:
             method,
             self._format_filters(filters),
             error_message,
+        )
+
+    def _log_aneel_resource_failure(
+        self,
+        *,
+        dataset: str,
+        method: str,
+        resource_id: str,
+        filters: dict[str, Any] | None,
+        err: BaseException,
+    ) -> None:
+        """Registra falha de um recurso sem interromper os demais recursos."""
+
+        _LOGGER.warning(
+            (
+                "ANEEL recurso falhou e sera ignorado: dataset=%s; metodo=%s; "
+                "resource_id=%s; filtros=%s; erro=%s"
+            ),
+            dataset,
+            method,
+            resource_id,
+            self._format_filters(filters),
+            self._describe_exception(err),
         )
 
     def _log_aneel_method_success(

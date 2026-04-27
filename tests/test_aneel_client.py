@@ -208,6 +208,7 @@ tributos_module = _load_module(f"{_PKG_NAME}.tributos", _BASE_DIR / "tributos" /
 AneelClient = aneel_module.AneelClient
 ANEEL_CSV_TIMEOUT_SECONDS = aneel_module.ANEEL_CSV_TIMEOUT_SECONDS
 ANEEL_JSON_TIMEOUT_SECONDS = aneel_module.ANEEL_JSON_TIMEOUT_SECONDS
+RESOURCE_FIO_B_ANOS = aneel_module.AneelClient.RESOURCE_FIO_B_ANOS
 TRIBUTOS_HTTP_TIMEOUT_SECONDS = tributos_module.TRIBUTOS_HTTP_TIMEOUT_SECONDS
 
 
@@ -230,10 +231,12 @@ class _FakeResponse:
         *,
         payload: dict | None = None,
         chunks: list[bytes] | None = None,
+        headers: dict[str, str] | None = None,
         text: str = "",
     ) -> None:
         self._payload = payload or {}
         self.content = _FakeStreamContent(chunks or [])
+        self.headers = headers or {}
         self._text = text
 
     async def __aenter__(self):
@@ -414,6 +417,61 @@ def test_aneel_failure_log_includes_filters_and_exception_class(caplog):
     assert '"SigNomeAgente": "CPFL-PIRATINING"' in message
     assert '"DscComponenteTarifario": "TUSD_FioB"' in message
     assert "TimeoutError" in message
+
+
+def test_fetch_fio_b_csv_stops_after_first_valid_resource():
+    first_resource_csv = (
+        '"SigNomeAgente";"DscComponenteTarifario";"DatInicioVigencia";'
+        '"DatFimVigencia";"DscBaseTarifaria";"DscSubGrupoTarifario";'
+        '"DscModalidadeTarifaria";"DscClasseConsumidor";'
+        '"DscSubClasseConsumidor";"DscDetalheConsumidor";'
+        '"DscPostoTarifario";"VlrComponenteTarifario"\n'
+        '"OUTRA";"TUSD_FioB";"2026-01-01";"2026-10-22";'
+        '"Tarifa de Aplicacao";"B1";"Convencional";"Residencial";'
+        '"Residencial";"Nao se aplica";"Nao se aplica";"1"\n'
+    )
+    second_resource_csv = (
+        '"SigNomeAgente";"DscComponenteTarifario";"DatInicioVigencia";'
+        '"DatFimVigencia";"DscBaseTarifaria";"DscSubGrupoTarifario";'
+        '"DscModalidadeTarifaria";"DscClasseConsumidor";'
+        '"DscSubClasseConsumidor";"DscDetalheConsumidor";'
+        '"DscPostoTarifario";"VlrComponenteTarifario"\n'
+        '"CPFL-PIRATINING";"TUSD_FioB";"2026-01-01";"2026-10-22";'
+        '"Tarifa de Aplicacao";"B1";"Convencional";"Residencial";'
+        '"Residencial";"Nao se aplica";"Nao se aplica";"189,008164374"\n'
+    )
+    session = _FakeSession(
+        [
+            _FakeResponse(
+                payload={
+                    "success": True,
+                    "result": {"url": "https://example.test/fio-b-2026.csv"},
+                }
+            ),
+            _FakeResponse(chunks=[first_resource_csv.encode("latin-1")]),
+            _FakeResponse(
+                payload={
+                    "success": True,
+                    "result": {"url": "https://example.test/fio-b-2025.csv"},
+                }
+            ),
+            _FakeResponse(chunks=[second_resource_csv.encode("latin-1")]),
+        ]
+    )
+    client = AneelClient(session=session)
+
+    parsed, metadata = asyncio.run(
+        client.fetch_fio_b(
+            concessionaria="CPFL-PIRATINING",
+            priority_method="csv_xml",
+            reference_date=date(2026, 4, 27),
+        )
+    )
+
+    assert parsed["convencional_bruto_r_kwh"] == pytest.approx(0.189008164374)
+    assert metadata.resource_id == ",".join(RESOURCE_FIO_B_ANOS[:2])
+    assert len(session.calls) == 4
+    assert "fio-b-2024" not in "\n".join(call["url"] for call in session.calls)
 
 
 def test_tributos_requests_use_extended_timeout():
