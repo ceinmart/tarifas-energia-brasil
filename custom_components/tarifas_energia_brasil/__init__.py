@@ -6,6 +6,7 @@ Projeto/pasta: ha.ext.tarifas
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -28,15 +29,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Inicializa coordinator e plataformas para a config entry."""
 
     coordinator = TarifasEnergiaBrasilCoordinator(hass, entry)
-    await coordinator.async_config_entry_first_refresh()
-    await coordinator.async_start_state_tracking()
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await coordinator.async_start_state_tracking()
+    refresh_task = hass.async_create_task(
+        _async_refresh_after_setup(coordinator),
+        f"{DOMAIN}_{entry.entry_id}_initial_refresh",
+    )
+    entry.async_on_unload(refresh_task.cancel)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     return True
+
+
+async def _async_refresh_after_setup(
+    coordinator: TarifasEnergiaBrasilCoordinator,
+) -> None:
+    """Executa primeira atualizacao sem bloquear o setup da config entry."""
+
+    try:
+        await coordinator.async_refresh()
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        _LOGGER.debug(
+            "Falha na primeira atualizacao em background; nova tentativa ocorrera no ciclo.",
+            exc_info=True,
+        )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

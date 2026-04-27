@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.1.2 - 2026-04-27
+
+### Corrigido
+
+- O setup da integracao deixa de bloquear aguardando a primeira coleta externa completa, evitando cancelamento pelo timeout global de bootstrap do Home Assistant quando a ANEEL ou o fallback CSV estiverem lentos.
+- A primeira atualizacao passa a ser agendada em background; se falhar ou for cancelada, a integracao permanece carregada e novas tentativas ocorrem pelos ciclos normais do coordinator.
+
+### Testes
+
+- Cobertura adicionada para garantir que o setup agenda a primeira atualizacao sem chamar `async_config_entry_first_refresh()` de forma bloqueante.
+
 ## 0.1.1 - 2026-04-26
 
 ### Alterado
