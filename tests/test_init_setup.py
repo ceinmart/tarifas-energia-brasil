@@ -83,7 +83,11 @@ class _FakeCoordinator:
         self.started_tracking = False
         self.refreshed = False
         self.first_refresh_called = False
+        self.state_loaded = False
         _FakeCoordinator.instances.append(self)
+
+    async def async_ensure_state_loaded(self) -> None:
+        self.state_loaded = True
 
     async def async_config_entry_first_refresh(self) -> None:
         self.first_refresh_called = True
@@ -150,6 +154,7 @@ def test_setup_entry_schedules_initial_refresh_without_blocking_setup():
 
         coordinator = _FakeCoordinator.instances[0]
         assert result is True
+        assert coordinator.state_loaded is True
         assert coordinator.first_refresh_called is False
         assert coordinator.started_tracking is True
         assert coordinator.refreshed is True

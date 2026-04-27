@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import asdict
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -209,6 +210,9 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                 0.0,
             )
             self._creditos_ledger = deserialize_entries(payload.get("creditos_ledger"))
+            cached_snapshot = self._restore_cached_snapshot(payload.get("last_snapshot"))
+            if cached_snapshot is not None:
+                self.data = cached_snapshot
         self._state_loaded = True
 
     async def async_persist_state(self) -> None:
@@ -251,7 +255,61 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             "credito_estimado_atual_kwh": self._credito_estimado_atual_kwh,
             "credito_consumido_estimado_atual_kwh": self._credito_consumido_estimado_atual_kwh,
             "creditos_ledger": serialize_entries(self._creditos_ledger),
+            "last_snapshot": self._serialize_cached_snapshot(),
         }
+
+    def _serialize_cached_snapshot(self) -> dict[str, Any] | None:
+        """Serializa o ultimo snapshot valido para restauracao apos restart."""
+
+        if self.data is None:
+            return None
+        return {
+            "updated_at": self.data.updated_at.isoformat(),
+            "concessionaria": self.data.concessionaria,
+            "values": self.data.values,
+            "collections_by_key": {
+                key: asdict(metadata)
+                for key, metadata in self.data.collections_by_key.items()
+            },
+            "diagnostics": self.data.diagnostics,
+        }
+
+    def _restore_cached_snapshot(self, payload: Any) -> SnapshotCalculo | None:
+        """Restaura snapshot persistido para evitar sensores vazios no boot."""
+
+        if not isinstance(payload, dict):
+            return None
+        updated_at = self._as_datetime_or_none(payload.get("updated_at"))
+        concessionaria = self._as_str_or_none(payload.get("concessionaria"))
+        values = payload.get("values")
+        if updated_at is None or concessionaria is None or not isinstance(values, dict):
+            return None
+
+        collections_by_key: dict[str, CollectionMetadata] = {}
+        raw_collections = payload.get("collections_by_key")
+        if isinstance(raw_collections, dict):
+            allowed_fields = set(CollectionMetadata.__dataclass_fields__)
+            for key, metadata_payload in raw_collections.items():
+                if not isinstance(metadata_payload, dict):
+                    continue
+                metadata_kwargs = {
+                    field: metadata_payload[field]
+                    for field in allowed_fields
+                    if field in metadata_payload
+                }
+                collections_by_key[str(key)] = CollectionMetadata(**metadata_kwargs)
+
+        diagnostics = payload.get("diagnostics")
+        restored_diagnostics = dict(diagnostics) if isinstance(diagnostics, dict) else {}
+        restored_diagnostics["snapshot_restaurado_de_cache"] = True
+
+        return SnapshotCalculo(
+            updated_at=updated_at,
+            concessionaria=concessionaria,
+            values=dict(values),
+            collections_by_key=collections_by_key,
+            diagnostics=restored_diagnostics,
+        )
 
     @staticmethod
     def _merge_period_state(payload: dict[str, Any]) -> dict[str, dict[str, str | float | None]]:

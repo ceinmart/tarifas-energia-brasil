@@ -32,6 +32,7 @@ _LOGGER = logging.getLogger(__name__)
 ANEEL_JSON_TIMEOUT_SECONDS = 120
 ANEEL_CSV_TIMEOUT_SECONDS = 600
 CSV_STREAM_CHUNK_SIZE = 64 * 1024
+CSV_STREAM_ENCODING = "latin-1"
 
 
 class AneelClientError(Exception):
@@ -333,19 +334,34 @@ class AneelClient:
     async def _iter_csv_rows_from_response(self, response: Any):
         """Itera linhas CSV vindas da resposta HTTP sem materializar o arquivo inteiro."""
 
-        decoder = codecs.getincrementaldecoder("utf-8")(errors="ignore")
+        decoder = codecs.getincrementaldecoder(CSV_STREAM_ENCODING)(errors="replace")
         buffer = ""
+        delimiter: str | None = None
         async for chunk in response.content.iter_chunked(CSV_STREAM_CHUNK_SIZE):
             buffer += decoder.decode(chunk)
             while "\n" in buffer:
                 line, buffer = buffer.split("\n", 1)
-                for parsed in csv.reader([f"{line}\n"]):
+                if delimiter is None and line.strip():
+                    delimiter = self._detect_csv_delimiter(line)
+                for parsed in csv.reader([f"{line}\n"], delimiter=delimiter or ","):
                     yield parsed
 
         buffer += decoder.decode(b"", final=True)
         if buffer:
-            for parsed in csv.reader([buffer]):
+            if delimiter is None and buffer.strip():
+                delimiter = self._detect_csv_delimiter(buffer)
+            for parsed in csv.reader([buffer], delimiter=delimiter or ","):
                 yield parsed
+
+    @staticmethod
+    def _detect_csv_delimiter(header_line: str) -> str:
+        """Detecta delimitador CSV comum nos arquivos da ANEEL."""
+
+        try:
+            dialect = csv.Sniffer().sniff(header_line, delimiters=",;")
+            return str(dialect.delimiter)
+        except csv.Error:
+            return ";" if header_line.count(";") > header_line.count(",") else ","
 
     def _parse_tarifa_records(
         self,

@@ -29,6 +29,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Inicializa coordinator e plataformas para a config entry."""
 
     coordinator = TarifasEnergiaBrasilCoordinator(hass, entry)
+    await coordinator.async_ensure_state_loaded()
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.1.3 - 2026-04-27
+
+### Corrigido
+
+- A integracao passa a restaurar o ultimo snapshot valido salvo no Home Assistant durante o setup, mantendo sensores com os dados anteriores quando a coleta externa inicial falhar.
+- O fallback CSV da ANEEL passa a detectar delimitador `;`/`,` e decodificar o arquivo em streaming com encoding compativel com os CSVs publicados, corrigindo a coleta de Fio B da CPFL-PIRATINING quando o datastore CKAN nao retorna registros.
+
+### Testes
+
+- Cobertura adicionada para restauracao de snapshot apos reinicio, CSV ANEEL com delimitador `;` e encoding latin-1, e linhas vigentes de Fio B da CPFL-PIRATINING.
+
 ## 0.1.2 - 2026-04-27
 
 ### Corrigido

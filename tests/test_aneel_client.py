@@ -355,6 +355,43 @@ def test_csv_fallback_uses_extended_timeout_and_filters_streamed_chunks():
     ]
 
 
+def test_csv_fallback_filters_semicolon_latin1_chunks():
+    csv_text = (
+        '"SigNomeAgente";"DscBaseTarifaria";"VlrComponenteTarifario"\n'
+        '"CPFL-PIRATINING";"Tarifa de Aplicação";"189,008164374"\n'
+        '"OUTRA";"Tarifa de Aplicação";"0"\n'
+    )
+    payload = csv_text.encode("latin-1")
+    csv_chunks = [payload[:57], payload[57:92], payload[92:]]
+    session = _FakeSession(
+        [
+            _FakeResponse(
+                payload={
+                    "success": True,
+                    "result": {"url": "https://example.test/aneel.csv"},
+                }
+            ),
+            _FakeResponse(chunks=csv_chunks),
+        ]
+    )
+    client = AneelClient(session=session)
+
+    records = asyncio.run(
+        client._csv_xml_records(
+            resource_id="resource-id",
+            filters={"SigNomeAgente": "CPFL-PIRATINING"},
+        )
+    )
+
+    assert records == [
+        {
+            "SigNomeAgente": "CPFL-PIRATINING",
+            "DscBaseTarifaria": "Tarifa de Aplicação",
+            "VlrComponenteTarifario": "189,008164374",
+        }
+    ]
+
+
 def test_tributos_requests_use_extended_timeout():
     fallback = tributos_module.TributosFallback(
         pis=1.10,
@@ -447,3 +484,42 @@ def test_parse_fio_b_records_prefers_tarifa_aplicacao_residencial():
     assert parsed["branca_bruto_r_kwh_por_posto"]["fora_ponta"] == pytest.approx(0.0982842717)
     assert parsed["selection_debug"]["convencional"]["base_tarifaria"] == "Tarifa de Aplicacao"
     assert parsed["selection_debug"]["convencional"]["subclasse"] == "Residencial"
+
+
+def test_parse_fio_b_records_accepts_cpfl_piratining_current_rows():
+    client = AneelClient(session=None)
+    records = [
+        _fio_b_row(
+            DscBaseTarifaria="Tarifa de Aplicação",
+            DscSubGrupoTarifario="B1",
+            DscModalidadeTarifaria="Convencional",
+            DscClasseConsumidor="Residencial",
+            DscSubClasseConsumidor="Residencial",
+            DscDetalheConsumidor="Não se aplica",
+            DscPostoTarifario="Não se aplica",
+            VlrComponenteTarifario="189,00816437399999",
+        ),
+        _fio_b_row(
+            DscBaseTarifaria="Tarifa de Aplicação",
+            DscSubGrupoTarifario="B1",
+            DscModalidadeTarifaria="Branca",
+            DscClasseConsumidor="Residencial",
+            DscSubClasseConsumidor="Residencial",
+            DscDetalheConsumidor="Não se aplica",
+            DscPostoTarifario="Ponta",
+            VlrComponenteTarifario="491,42124922699998",
+        ),
+    ]
+
+    parsed = client._parse_fio_b_records(
+        records=records,
+        concessionaria="CPFL-PIRATINING",
+        reference_date=date(2026, 4, 27),
+    )
+
+    assert parsed["convencional_bruto_r_kwh"] == pytest.approx(0.189008164374)
+    assert parsed["branca_bruto_r_kwh_por_posto"]["ponta"] == pytest.approx(
+        0.491421249227
+    )
+    assert parsed["vigencia_inicio"] == "2026-01-01"
+    assert parsed["vigencia_fim"] == "2026-10-22"

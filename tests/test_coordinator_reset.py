@@ -195,6 +195,8 @@ BREAKDOWN_DAILY = const_module.BREAKDOWN_DAILY
 BREAKDOWN_WEEKLY = const_module.BREAKDOWN_WEEKLY
 CONF_CONCESSIONARIA = const_module.CONF_CONCESSIONARIA
 resolve_tarifa_branca_schedule = tarifa_branca_module.resolve_tarifa_branca_schedule
+CollectionMetadata = coordinator_module.CollectionMetadata
+SnapshotCalculo = coordinator_module.SnapshotCalculo
 
 
 def _build_coordinator() -> object:
@@ -218,6 +220,46 @@ def test_prepare_delta_context_reinitializes_reference_when_sensor_resets():
     assert context["reset_detected"] is True
     assert context["raw_delta_kwh"] == pytest.approx(-988.67)
     assert context["delta_kwh"] == pytest.approx(0.0)
+
+
+def test_cached_snapshot_roundtrip_restores_sensor_values_after_restart():
+    coordinator = _build_coordinator()
+    updated_at = datetime(2026, 4, 27, 10, 0, tzinfo=UTC)
+    coordinator.data = SnapshotCalculo(
+        updated_at=updated_at,
+        concessionaria="CPFL-PIRATINING",
+        values={
+            "tarifa_convencional_final_r_kwh": 0.9748,
+            "bandeira_vigente": "Verde",
+        },
+        collections_by_key={
+            "tarifa_convencional_final_r_kwh": CollectionMetadata(
+                fonte="dados_abertos_aneel",
+                metodo_acesso="datastore_search",
+                tentativas=1,
+            )
+        },
+        diagnostics={
+            "mensagem_erro": None,
+            "consumo_mensal_kwh_apurado": 120.0,
+        },
+    )
+
+    cached = coordinator._serialize_cached_snapshot()
+    restored = coordinator._restore_cached_snapshot(cached)
+
+    assert restored is not None
+    assert restored.updated_at == updated_at
+    assert restored.concessionaria == "CPFL-PIRATINING"
+    assert restored.values["tarifa_convencional_final_r_kwh"] == pytest.approx(0.9748)
+    assert (
+        restored.collections_by_key[
+            "tarifa_convencional_final_r_kwh"
+        ].metodo_acesso
+        == "datastore_search"
+    )
+    assert restored.diagnostics["consumo_mensal_kwh_apurado"] == pytest.approx(120.0)
+    assert restored.diagnostics["snapshot_restaurado_de_cache"] is True
 
 
 def test_scalar_period_state_does_not_copy_reset_total_to_every_breakdown():
