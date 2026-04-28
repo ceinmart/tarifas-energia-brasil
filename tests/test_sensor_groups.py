@@ -6,6 +6,7 @@ Projeto/pasta: ha.ext.tarifas
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import sys
 import types
@@ -76,6 +77,16 @@ def _install_fake_homeassistant_modules() -> None:
     class SensorEntity:
         pass
 
+    class RestoreSensor(SensorEntity):
+        async def async_added_to_hass(self) -> None:
+            return None
+
+        async def async_get_last_sensor_data(self):  # noqa: ANN201
+            return getattr(self, "_fake_last_sensor_data", None)
+
+        async def async_get_last_state(self):  # noqa: ANN201
+            return getattr(self, "_fake_last_state", None)
+
     @dataclass
     class ConfigEntry:
         data: dict
@@ -110,6 +121,7 @@ def _install_fake_homeassistant_modules() -> None:
         return value.lower().replace(" ", "_").replace("-", "_")
 
     sensor_module.SensorDeviceClass = SensorDeviceClass
+    sensor_module.RestoreSensor = RestoreSensor
     sensor_module.SensorEntity = SensorEntity
     sensor_module.SensorEntityDescription = SensorEntityDescription
     sensor_module.SensorStateClass = SensorStateClass
@@ -117,6 +129,8 @@ def _install_fake_homeassistant_modules() -> None:
     config_entries.ConfigEntry = ConfigEntry
     const.PERCENTAGE = "%"
     const.Platform = Platform
+    const.STATE_UNAVAILABLE = "unavailable"
+    const.STATE_UNKNOWN = "unknown"
     core.HomeAssistant = object
     device_registry.DeviceEntryType = DeviceEntryType
     device_registry.DeviceInfo = DeviceInfo
@@ -367,3 +381,65 @@ def test_numeric_native_value_is_rounded_to_four_decimal_places():
     )
 
     assert entity.native_value == 0.7879
+
+
+def test_sensor_restores_previous_numeric_state_when_coordinator_has_no_snapshot():
+    entry = ConfigEntry(
+        data={
+            CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+            CONF_ENTIDADE_CONSUMO: "sensor.consumo_total",
+            CONF_HABILITAR_GRUPO_TARIFA_BRANCA: False,
+        },
+        options={},
+    )
+    description = next(
+        item
+        for item in montar_descricoes_sensores(entry)
+        if item.chave_valor == "tarifa_convencional_final_r_kwh"
+    )
+
+    class DummyCoordinator:
+        data = None
+        last_update_success = False
+
+    entity = TarifasEnergiaBrasilSensor(
+        coordinator=DummyCoordinator(),
+        entry=entry,
+        description=description,
+    )
+    entity._fake_last_state = types.SimpleNamespace(state="0.7879")
+
+    asyncio.run(entity.async_added_to_hass())
+
+    assert entity.available is True
+    assert entity.native_value == 0.7879
+
+
+def test_sensor_restores_previous_text_state_when_coordinator_has_no_snapshot():
+    entry = ConfigEntry(
+        data={
+            CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+            CONF_ENTIDADE_CONSUMO: "sensor.consumo_total",
+            CONF_HABILITAR_GRUPO_TARIFA_BRANCA: False,
+        },
+        options={},
+    )
+    description = next(
+        item for item in montar_descricoes_sensores(entry) if item.chave_valor == "bandeira_vigente"
+    )
+
+    class DummyCoordinator:
+        data = None
+        last_update_success = False
+
+    entity = TarifasEnergiaBrasilSensor(
+        coordinator=DummyCoordinator(),
+        entry=entry,
+        description=description,
+    )
+    entity._fake_last_state = types.SimpleNamespace(state="verde")
+
+    asyncio.run(entity.async_added_to_hass())
+
+    assert entity.available is True
+    assert entity.native_value == "verde"

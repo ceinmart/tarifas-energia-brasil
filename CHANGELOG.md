@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.1.8 - 2026-04-28
+
+### Corrigido
+
+- Sensores passam a usar restauracao nativa do Home Assistant (`RestoreSensor`) para manter o ultimo valor conhecido quando o coordinator ainda nao tem snapshot valido apos o restart.
+- A disponibilidade dos sensores passa a considerar snapshot atual ou valor restaurado, evitando que uma falha inicial temporaria da ANEEL deixe entidades previamente populadas como indisponiveis.
+- O snapshot persistido pelo coordinator passa a ser agendado depois que o resultado calculado e aplicado em `self.data`, evitando salvar `last_snapshot` vazio apos coleta bem-sucedida.
+
+### Testes
+
+- Cobertura adicionada para restauracao de estado numerico e textual quando a primeira coleta externa falha.
+
 ## 0.1.7 - 2026-04-28
 
 ### Corrigido

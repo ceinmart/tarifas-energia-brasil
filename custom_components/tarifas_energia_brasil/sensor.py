@@ -10,13 +10,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
-    SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE
+from homeassistant.const import PERCENTAGE, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
@@ -483,7 +483,7 @@ def montar_descricoes_sensores(entry: ConfigEntry) -> tuple[DescricaoSensorTarif
     return tuple(descriptions)
 
 
-class TarifasEnergiaBrasilSensor(CoordinatorEntity[TarifasEnergiaBrasilCoordinator], SensorEntity):
+class TarifasEnergiaBrasilSensor(CoordinatorEntity[TarifasEnergiaBrasilCoordinator], RestoreSensor):
     """Sensor generico para chaves publicadas pelo coordinator."""
 
     entity_description: DescricaoSensorTarifa
@@ -500,6 +500,7 @@ class TarifasEnergiaBrasilSensor(CoordinatorEntity[TarifasEnergiaBrasilCoordinat
         super().__init__(coordinator)
         self.entity_description = description
         self._entry = entry
+        self._restored_native_value: Any = None
         concessionaria = _entry_value(entry, CONF_CONCESSIONARIA, "desconhecida")
         concessionaria_slug = slugify(str(concessionaria))
 
@@ -512,18 +513,55 @@ class TarifasEnergiaBrasilSensor(CoordinatorEntity[TarifasEnergiaBrasilCoordinat
             entry_type=DeviceEntryType.SERVICE,
         )
 
+    async def async_added_to_hass(self) -> None:
+        """Restaura ultimo valor conhecido enquanto o coordinator ainda nao atualizou."""
+
+        await super().async_added_to_hass()
+        if self.coordinator.data is not None:
+            return
+
+        if (last_sensor_data := await self.async_get_last_sensor_data()) is not None:
+            restored_value = last_sensor_data.native_value
+            if restored_value not in (None, STATE_UNKNOWN, STATE_UNAVAILABLE, ""):
+                self._restored_native_value = restored_value
+                return
+
+        last_state = await self.async_get_last_state()
+        if last_state is None or last_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE, ""):
+            return
+        self._restored_native_value = self._coerce_restored_state(last_state.state)
+
+    def _coerce_restored_state(self, state: str) -> Any:
+        """Converte estado restaurado pelo HA para o tipo nativo esperado."""
+
+        if not self._expects_numeric_state():
+            return state
+        try:
+            return float(state)
+        except (TypeError, ValueError):
+            return None
+
+    def _expects_numeric_state(self) -> bool:
+        """Indica se a descricao do sensor exige valor numerico."""
+
+        return bool(
+            self.entity_description.state_class is not None
+            or self.entity_description.native_unit_of_measurement is not None
+            or self.entity_description.device_class is not None
+        )
+
     @property
     def available(self) -> bool:
-        """Entidade disponivel quando coordinator possui snapshot."""
+        """Entidade disponivel quando ha snapshot atual ou valor restaurado."""
 
-        return super().available and self.coordinator.data is not None
+        return self.coordinator.data is not None or self._restored_native_value is not None
 
     @property
     def native_value(self) -> Any:
         """Retorna valor atual da chave de snapshot."""
 
         if self.coordinator.data is None:
-            return None
+            return self._restored_native_value
         raw = self.coordinator.data.valores.get(self.entity_description.chave_valor)
         if isinstance(raw, bool):
             return "sim" if raw else "nao"

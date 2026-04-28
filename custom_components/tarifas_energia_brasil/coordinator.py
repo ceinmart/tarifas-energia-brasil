@@ -1530,8 +1530,6 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
             "ledger_creditos": serialize_entries(self._creditos_ledger),
         }
 
-        self._schedule_state_save()
-
         snapshot = ResultadoCalculo(
             atualizado_em=now,
             concessionaria=concessionaria,
@@ -1541,6 +1539,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
         )
         self.data = snapshot
         self._update_dynamic_diagnosticos(now)
+        self._schedule_state_save()
         return snapshot
 
     def _effective_update_hours(self) -> int:
