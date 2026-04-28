@@ -4,6 +4,23 @@
 
 Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de concessionarias e calcula estimativas de custo de energia no Brasil (convencional, tarifa branca e cenarios com geracao/SCEE).
 
+## Indice
+
+- [Status](#status)
+- [Instalacao (HACS)](#instalacao-hacs)
+- [Configuracao no Home Assistant](#configuracao-no-home-assistant)
+- [Concessionarias](#concessionarias)
+- [Fontes oficiais](#fontes-oficiais)
+- [REGRAS SCEE](#regras-scee)
+- [Endpoints/datasets consultados](#endpointsdatasets-consultados)
+- [Frequencia de chamadas e fallback](#frequencia-de-chamadas-e-fallback)
+- [Persistencia de creditos SCEE (60 meses)](#persistencia-de-creditos-scee-60-meses)
+- [Como ver a ultima atualizacao](#como-ver-a-ultima-atualizacao)
+- [Device e entidades](#device-e-entidades)
+- [Calculos detalhados](#calculos-detalhados)
+- [Fixtures e testes de extratores](#fixtures-e-testes-de-extratores)
+- [Links de versao](#links-de-versao)
+
 ## Status
 
 - Versao atual: `0.1.5` (release oficial).
@@ -94,6 +111,56 @@ Links de concessionarias usados para tributos (MVP atual):
 - [CPFL Piratininga - PIS/COFINS](https://www.cpfl.com.br/piratininga/pis-cofins)
 - [CPFL Paulista - PIS/COFINS](https://www.cpfl.com.br/paulista/pis-cofins)
 - [Celesc - Tarifas e tributos](https://www.celesc.com.br/tarifas-de-energia)
+
+## REGRAS SCEE
+
+**SCEE** significa **Sistema de Compensacao de Energia Eletrica**.
+
+Regras gerais aplicadas em toda a extensao:
+
+- A extensao calcula estimativas; o valor oficial continua sendo o fechamento da concessionaria.
+- A energia injetada na rede pode virar credito em kWh para compensar consumo.
+- Os creditos SCEE podem ser usados por ate 60 meses, conforme regra geral da ANEEL.
+- A compensacao considera consumo, energia injetada, creditos existentes e saldo previsto de creditos.
+- A geracao so entra no calculo de auto-consumo quando tambem existe a informacao de injecao.
+- O tipo de instalacao define o consumo minimo faturavel:
+  - monofasico: 30 kWh
+  - bifasico: 50 kWh
+  - trifasico: 100 kWh
+- As regras de ICMS/PIS/COFINS variam por estado, concessionaria e fonte de dados disponivel.
+- Dependendo do consumo minimo, a instalacao pode ja entrar em uma faixa minima de ICMS.
+- Essa faixa minima pode alterar tarifas finais, custo de disponibilidade, creditos previstos e valor estimado da conta.
+- E comum a concessionaria calcular o valor do credito recalculando a tarifa sem os componentes que geram desconto, como Fio B e ICMS.
+- Normalmente, a diferenca observada na fatura da concessionaria deve ficar proxima da entidade `Fio B final`.
+- Na extensao, `Fio B final` representa o custo efetivo da compensacao: TUSD de consumo final menos TUSD injetada creditada final.
+- A bandeira tarifaria vigente entra na estimativa quando houver dado disponivel.
+- A bandeira tarifaria representa um adicional aplicado ao consumo conforme a condicao de geracao do sistema eletrico.
+- O adicional de bandeira e convertido para R$/kWh e aplicado nos valores estimados de conta.
+- A bandeira pode alterar o valor previsto mesmo sem mudanca na tarifa base da concessionaria.
+- Em cenarios SCEE, o adicional de bandeira deve incidir apenas sobre energia faturavel/nao compensada, conforme a regra aplicavel.
+- Como a bandeira pode mudar por periodo, a previsao mensal pode oscilar ate o fechamento da fatura.
+- Auto-consumo e a energia gerada e consumida localmente antes de ser injetada na rede.
+- O auto-consumo so pode ser calculado quando existem as informacoes de geracao e injecao.
+- A entidade de consumo nao afeta o calculo de auto-consumo e nunca deve ser usada para isso.
+- A formula aplicada e: `auto-consumo = geracao - injecao`.
+- O auto-consumo nao vira credito SCEE, porque nao foi energia injetada na rede da distribuidora.
+- A extensao exibe o auto-consumo para separar a energia usada diretamente da energia que pode gerar credito.
+- Essa separacao melhora a leitura de energia injetada, creditos previstos, Fio B e valor final estimado.
+- As estimativas podem oscilar durante o mes conforme consumo, injecao, bandeira vigente e mudancas de faixa ate o fechamento.
+- A previsao mensal deve ser tratada como tendencia, nao como fatura definitiva.
+
+Exemplos basicos:
+
+- Em uma instalacao monofasica, mesmo com muitos creditos, pode existir cobranca minima equivalente a 30 kWh.
+- Se o consumo minimo enquadrar a instalacao em uma faixa de ICMS, a estimativa pode iniciar o mes com tarifa final diferente de zero.
+- Se o consumo aumenta durante o mes, a instalacao pode mudar de faixa e alterar ICMS, Fio B, creditos previstos e total estimado.
+- Se houver consumo faturavel apos compensacao de creditos, a bandeira pode adicionar custo sobre esse consumo.
+- Se os creditos compensarem toda a energia aplicavel, ainda pode existir cobranca minima, tributos ou componentes nao compensaveis conforme a regra da concessionaria.
+- Uma mudanca de bandeira no meio do ciclo pode alterar a previsao do mes, mesmo que consumo e geracao sigam parecidos.
+- Se a instalacao gerou 20 kWh e injetou 12 kWh, o auto-consumo estimado e 8 kWh.
+- Se nao existir informacao de geracao ou nao existir informacao de injecao, a extensao nao calcula auto-consumo.
+- A entidade de consumo da casa nao entra nesse calculo.
+- Se a energia injetada supera o consumo compensavel, o excedente entra como credito para proximos ciclos, respeitando a validade aplicavel.
 
 ## Endpoints/datasets consultados
 
