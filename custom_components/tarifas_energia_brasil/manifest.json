@@ -5,7 +5,9 @@
     "@ceinmart"
   ],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": [
+    "diagnostics"
+  ],
   "documentation": "https://github.com/ceinmart/tarifas-energia-brasil",
   "integration_type": "service",
   "iot_class": "cloud_polling",
@@ -14,5 +16,5 @@
     "custom_components.tarifas_energia_brasil"
   ],
   "requirements": [],
-  "version": "0.1.6"
+  "version": "0.1.7"
 }

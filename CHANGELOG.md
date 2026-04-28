@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.7 - 2026-04-28
+
+### Corrigido
+
+- Corrigida a plataforma de diagnosticos para usar a API externa obrigatoria do Home Assistant (`diagnostics`) sem traduzir nomes reservados.
+- Declarada a dependencia `diagnostics` no `manifest.json`, atendendo a validacao do hassfest.
+- Adicionado `CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)` para declarar que a integracao e configurada apenas por config entries.
+
 ## 0.1.6 - 2026-04-28
 
 ### Alterado

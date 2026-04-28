@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.diagnosticos import async_redact_data
+from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
@@ -17,7 +17,7 @@ from .const import CONF_ENTIDADE_CONSUMO, CONF_ENTIDADE_GERACAO, DOMAIN
 TO_REDACT = {CONF_ENTIDADE_CONSUMO, CONF_ENTIDADE_GERACAO}
 
 
-async def async_get_config_entry_diagnosticos(
+async def async_get_config_entry_diagnostics(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> dict[str, Any]:

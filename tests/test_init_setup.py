@@ -19,6 +19,8 @@ def _install_homeassistant_stub() -> None:
     homeassistant = types.ModuleType("homeassistant")
     config_entries = types.ModuleType("homeassistant.config_entries")
     core = types.ModuleType("homeassistant.core")
+    helpers = types.ModuleType("homeassistant.helpers")
+    config_validation = types.ModuleType("homeassistant.helpers.config_validation")
 
     class ConfigEntry:
         pass
@@ -28,13 +30,18 @@ def _install_homeassistant_stub() -> None:
 
     config_entries.ConfigEntry = ConfigEntry
     core.HomeAssistant = HomeAssistant
+    config_validation.config_entry_only_config_schema = lambda domain: {"domain": domain}
 
     homeassistant.config_entries = config_entries
     homeassistant.core = core
+    homeassistant.helpers = helpers
+    helpers.config_validation = config_validation
 
     sys.modules["homeassistant"] = homeassistant
     sys.modules["homeassistant.config_entries"] = config_entries
     sys.modules["homeassistant.core"] = core
+    sys.modules["homeassistant.helpers"] = helpers
+    sys.modules["homeassistant.helpers.config_validation"] = config_validation
 
 
 def _load_init_module():
