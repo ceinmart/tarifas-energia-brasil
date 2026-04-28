@@ -186,11 +186,7 @@ def _load_module(module_name: str, file_path: Path):
 _install_homeassistant_stub()
 _install_aiohttp_stub()
 
-_BASE_DIR = (
-    Path(__file__).resolve().parents[1]
-    / "custom_components"
-    / "tarifas_energia_brasil"
-)
+_BASE_DIR = Path(__file__).resolve().parents[1] / "custom_components" / "tarifas_energia_brasil"
 _PKG_NAME = "tarifas_energia_brasil_testpkg_aneel"
 
 if _PKG_NAME not in sys.modules:
@@ -600,8 +596,6 @@ def test_parse_fio_b_records_accepts_cpfl_piratining_current_rows():
     )
 
     assert parsed["convencional_bruto_r_kwh"] == pytest.approx(0.189008164374)
-    assert parsed["branca_bruto_r_kwh_por_posto"]["ponta"] == pytest.approx(
-        0.491421249227
-    )
+    assert parsed["branca_bruto_r_kwh_por_posto"]["ponta"] == pytest.approx(0.491421249227)
     assert parsed["vigencia_inicio"] == "2026-01-01"
     assert parsed["vigencia_fim"] == "2026-10-22"

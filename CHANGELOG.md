@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## 0.1.6 - 2026-04-28
+
+### Alterado
+
+- Padronizada a nomenclatura interna controlada pela integracao para portugues, incluindo constantes, modelos, chaves dinamicas de sensores e valores de quebra.
+- Quebras de calculo passam a usar `diario`, `semanal` e `mensal` no lugar de `daily`, `weekly` e `monthly`.
+- Entidades atuais de auto-consumo foram renomeadas para explicitar que representam valor acumulado.
+
+### Adicionado
+
+- Auto-consumo passa a ter entidades por quebra habilitada:
+  - `auto_consumo_diario_kwh` e `auto_consumo_diario_reais`;
+  - `auto_consumo_semanal_kwh` e `auto_consumo_semanal_reais`;
+  - `auto_consumo_mensal_kwh` e `auto_consumo_mensal_reais`.
+
+### Documentacao
+
+- README, docs e documentacao tecnica atualizados para refletir os nomes em portugues e a nova release.
+
+### Atencao
+
+- Esta versao altera chaves tecnicas de entidades dinamicas que antes usavam `daily`, `weekly` e `monthly`; o Home Assistant pode criar novos `entity_id`s para essas entidades.
+
 ## 0.1.5 - 2026-04-27
 
 ### Corrigido

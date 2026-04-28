@@ -12,7 +12,7 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_UPDATE_HOURS, DEFAULT_UPDATE_HOURS, DOMAIN, PLATFORMS
+from .const import CONF_HORAS_ATUALIZACAO, DOMAIN, HORAS_ATUALIZACAO_PADRAO, PLATFORMS
 from .coordinator import TarifasEnergiaBrasilCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -80,6 +80,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Recarrega entrada quando options sao alteradas."""
 
-    update_hours = entry.options.get(CONF_UPDATE_HOURS, DEFAULT_UPDATE_HOURS)
+    update_hours = entry.options.get(CONF_HORAS_ATUALIZACAO, HORAS_ATUALIZACAO_PADRAO)
     _LOGGER.debug("Recarregando %s com update_hours=%s", entry.entry_id, update_hours)
     await hass.config_entries.async_reload(entry.entry_id)

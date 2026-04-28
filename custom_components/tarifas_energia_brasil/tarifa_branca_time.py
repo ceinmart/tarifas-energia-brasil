@@ -13,12 +13,12 @@ from typing import Any
 
 from .const import (
     CONF_CONCESSIONARIA,
-    CONF_TB_INTERMEDIATE1_END,
-    CONF_TB_INTERMEDIATE1_START,
-    CONF_TB_INTERMEDIATE2_END,
-    CONF_TB_INTERMEDIATE2_START,
-    CONF_TB_PONTA_END,
-    CONF_TB_PONTA_START,
+    CONF_TB_INTERMEDIARIO1_FIM,
+    CONF_TB_INTERMEDIARIO1_INICIO,
+    CONF_TB_INTERMEDIARIO2_FIM,
+    CONF_TB_INTERMEDIARIO2_INICIO,
+    CONF_TB_PONTA_FIM,
+    CONF_TB_PONTA_INICIO,
 )
 
 POSTO_FORA_PONTA = "fora_ponta"
@@ -44,38 +44,38 @@ _FIXED_HOLIDAYS: tuple[tuple[int, int], ...] = (
 )
 
 _GENERIC_FALLBACK = {
-    CONF_TB_PONTA_START: "18:00",
-    CONF_TB_PONTA_END: "21:00",
-    CONF_TB_INTERMEDIATE1_START: "17:00",
-    CONF_TB_INTERMEDIATE1_END: "18:00",
-    CONF_TB_INTERMEDIATE2_START: "21:00",
-    CONF_TB_INTERMEDIATE2_END: "22:00",
+    CONF_TB_PONTA_INICIO: "18:00",
+    CONF_TB_PONTA_FIM: "21:00",
+    CONF_TB_INTERMEDIARIO1_INICIO: "17:00",
+    CONF_TB_INTERMEDIARIO1_FIM: "18:00",
+    CONF_TB_INTERMEDIARIO2_INICIO: "21:00",
+    CONF_TB_INTERMEDIARIO2_FIM: "22:00",
 }
 
-DEFAULT_TARIFA_BRANCA_WINDOWS: dict[str, dict[str, str]] = {
+JANELAS_TARIFA_BRANCA_PADRAO: dict[str, dict[str, str]] = {
     "CPFL-PIRATINING": {
-        CONF_TB_PONTA_START: "18:00",
-        CONF_TB_PONTA_END: "21:00",
-        CONF_TB_INTERMEDIATE1_START: "17:00",
-        CONF_TB_INTERMEDIATE1_END: "18:00",
-        CONF_TB_INTERMEDIATE2_START: "21:00",
-        CONF_TB_INTERMEDIATE2_END: "22:00",
+        CONF_TB_PONTA_INICIO: "18:00",
+        CONF_TB_PONTA_FIM: "21:00",
+        CONF_TB_INTERMEDIARIO1_INICIO: "17:00",
+        CONF_TB_INTERMEDIARIO1_FIM: "18:00",
+        CONF_TB_INTERMEDIARIO2_INICIO: "21:00",
+        CONF_TB_INTERMEDIARIO2_FIM: "22:00",
     },
     "CPFL-PAULISTA": {
-        CONF_TB_PONTA_START: "18:00",
-        CONF_TB_PONTA_END: "21:00",
-        CONF_TB_INTERMEDIATE1_START: "16:00",
-        CONF_TB_INTERMEDIATE1_END: "18:00",
-        CONF_TB_INTERMEDIATE2_START: "21:00",
-        CONF_TB_INTERMEDIATE2_END: "22:00",
+        CONF_TB_PONTA_INICIO: "18:00",
+        CONF_TB_PONTA_FIM: "21:00",
+        CONF_TB_INTERMEDIARIO1_INICIO: "16:00",
+        CONF_TB_INTERMEDIARIO1_FIM: "18:00",
+        CONF_TB_INTERMEDIARIO2_INICIO: "21:00",
+        CONF_TB_INTERMEDIARIO2_FIM: "22:00",
     },
     "CELESC": {
-        CONF_TB_PONTA_START: "18:30",
-        CONF_TB_PONTA_END: "21:30",
-        CONF_TB_INTERMEDIATE1_START: "17:30",
-        CONF_TB_INTERMEDIATE1_END: "18:30",
-        CONF_TB_INTERMEDIATE2_START: "21:30",
-        CONF_TB_INTERMEDIATE2_END: "22:30",
+        CONF_TB_PONTA_INICIO: "18:30",
+        CONF_TB_PONTA_FIM: "21:30",
+        CONF_TB_INTERMEDIARIO1_INICIO: "17:30",
+        CONF_TB_INTERMEDIARIO1_FIM: "18:30",
+        CONF_TB_INTERMEDIARIO2_INICIO: "21:30",
+        CONF_TB_INTERMEDIARIO2_FIM: "22:30",
     },
 }
 
@@ -147,12 +147,12 @@ def _is_half_open(minute_of_day: int, start: time, end: time) -> bool:
     return _time_to_minutes(start) <= minute_of_day < _time_to_minutes(end)
 
 
-def get_default_tarifa_branca_windows(concessionaria: str) -> tuple[dict[str, str], str]:
+def obter_janelas_padrao_tarifa_branca(concessionaria: str) -> tuple[dict[str, str], str]:
     """Retorna janela default da concessionaria ou fallback generico."""
 
     normalized = str(concessionaria or "").strip().upper()
-    if normalized in DEFAULT_TARIFA_BRANCA_WINDOWS:
-        return dict(DEFAULT_TARIFA_BRANCA_WINDOWS[normalized]), "default_concessionaria"
+    if normalized in JANELAS_TARIFA_BRANCA_PADRAO:
+        return dict(JANELAS_TARIFA_BRANCA_PADRAO[normalized]), "default_concessionaria"
     return dict(_GENERIC_FALLBACK), "fallback_generico"
 
 
@@ -162,16 +162,16 @@ def resolve_tarifa_branca_schedule(
     """Resolve horarios efetivos combinando defaults da concessionaria e overrides."""
 
     concessionaria = str(config.get(CONF_CONCESSIONARIA, "") or "").strip().upper()
-    windows, source = get_default_tarifa_branca_windows(concessionaria)
+    windows, source = obter_janelas_padrao_tarifa_branca(concessionaria)
     override_used = False
 
     for key in (
-        CONF_TB_PONTA_START,
-        CONF_TB_PONTA_END,
-        CONF_TB_INTERMEDIATE1_START,
-        CONF_TB_INTERMEDIATE1_END,
-        CONF_TB_INTERMEDIATE2_START,
-        CONF_TB_INTERMEDIATE2_END,
+        CONF_TB_PONTA_INICIO,
+        CONF_TB_PONTA_FIM,
+        CONF_TB_INTERMEDIARIO1_INICIO,
+        CONF_TB_INTERMEDIARIO1_FIM,
+        CONF_TB_INTERMEDIARIO2_INICIO,
+        CONF_TB_INTERMEDIARIO2_FIM,
     ):
         raw = config.get(key)
         if raw not in (None, ""):
@@ -180,12 +180,12 @@ def resolve_tarifa_branca_schedule(
 
     schedule = TarifaBrancaSchedule(
         concessionaria=concessionaria,
-        ponta_inicio=parse_time_text(windows[CONF_TB_PONTA_START]),
-        ponta_fim=parse_time_text(windows[CONF_TB_PONTA_END]),
-        intermediario_1_inicio=parse_time_text(windows[CONF_TB_INTERMEDIATE1_START]),
-        intermediario_1_fim=parse_time_text(windows[CONF_TB_INTERMEDIATE1_END]),
-        intermediario_2_inicio=parse_time_text(windows[CONF_TB_INTERMEDIATE2_START]),
-        intermediario_2_fim=parse_time_text(windows[CONF_TB_INTERMEDIATE2_END]),
+        ponta_inicio=parse_time_text(windows[CONF_TB_PONTA_INICIO]),
+        ponta_fim=parse_time_text(windows[CONF_TB_PONTA_FIM]),
+        intermediario_1_inicio=parse_time_text(windows[CONF_TB_INTERMEDIARIO1_INICIO]),
+        intermediario_1_fim=parse_time_text(windows[CONF_TB_INTERMEDIARIO1_FIM]),
+        intermediario_2_inicio=parse_time_text(windows[CONF_TB_INTERMEDIARIO2_INICIO]),
+        intermediario_2_fim=parse_time_text(windows[CONF_TB_INTERMEDIARIO2_FIM]),
         source="user_override" if override_used else source,
     )
 
@@ -339,9 +339,7 @@ def split_interval_by_tarifa_branca(
     while cursor < end:
         local = _as_reference_local(cursor)
         day = local.date()
-        candidates = [
-            datetime.combine(day + timedelta(days=1), time.min, tzinfo=tzinfo)
-        ]
+        candidates = [datetime.combine(day + timedelta(days=1), time.min, tzinfo=tzinfo)]
 
         if day.weekday() < 5 and day not in holidays:
             for boundary in schedule.boundary_times():

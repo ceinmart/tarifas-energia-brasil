@@ -31,10 +31,7 @@ class IcmsRangeRule:
 
         if self.max_kwh_inclusive is None:
             return f"kWh >= {self.min_kwh_inclusive:.6f}"
-        return (
-            f"{self.min_kwh_inclusive:.6f} <= kWh <= "
-            f"{self.max_kwh_inclusive:.6f}"
-        )
+        return f"{self.min_kwh_inclusive:.6f} <= kWh <= {self.max_kwh_inclusive:.6f}"
 
 
 ICMS_RULES_BY_CONCESSIONARIA: dict[str, list[IcmsRangeRule]] = {
@@ -101,11 +98,7 @@ def build_icms_calculation_attributes(
     """Monta atributos explicativos do ICMS conforme regra da concessionaria."""
 
     normalized = (concessionaria or "").strip().upper()
-    faixa_kwh = (
-        consumo_mensal_kwh
-        if consumo_faturavel_kwh is None
-        else consumo_faturavel_kwh
-    )
+    faixa_kwh = consumo_mensal_kwh if consumo_faturavel_kwh is None else consumo_faturavel_kwh
     rules = ICMS_RULES_BY_CONCESSIONARIA.get(normalized)
     attrs: dict[str, float | str | list[str]] = {
         "icms_consumo_mensal_kwh": consumo_mensal_kwh,
@@ -126,8 +119,7 @@ def build_icms_calculation_attributes(
         return attrs
 
     attrs["icms_regra_faixas"] = [
-        f"{rule.describe()} => {rule.icms_percent:.2f}%"
-        for rule in rules
+        f"{rule.describe()} => {rule.icms_percent:.2f}%" for rule in rules
     ]
 
     if icms_source == "fallback_bootstrap_sem_historico":

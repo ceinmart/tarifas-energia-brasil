@@ -21,9 +21,9 @@ flowchart TD
     B --> C["AneelClient"]
     B --> D["extract_tributos"]
     B --> E["calculators.py"]
-    B --> F["credito_ledger.py"]
+    B --> F["credito_registro.py"]
     B --> G["tarifa_branca_time.py"]
-    B --> H["SnapshotCalculo"]
+    B --> H["ResultadoCalculo"]
     H --> I["sensor.py"]
 ```
 
@@ -33,23 +33,23 @@ flowchart TD
 |---|---|
 | `__init__.py` | Inicializa a entrada, cria o coordinator, encaminha plataformas e persiste estado no unload. |
 | `coordinator.py` | Orquestra coleta externa, acumuladores, calculos, persistencia e diagnosticos. |
-| `aneel_client.py` | Consulta datasets ANEEL por CKAN e fallback configurado. |
+| `aneel_client.py` | Consulta datasets ANEEL por CKAN e alternativo configurado. |
 | `calculators.py` | Calcula tarifas, tributos, disponibilidade, Fio B, bandeira e SCEE. |
-| `sensor.py` | Publica entidades de sensor a partir de `SnapshotCalculo.values`. |
+| `sensor.py` | Publica entidades de sensor a partir de `ResultadoCalculo.valores`. |
 
 ## Comportamento de acumuladores
 
 As entidades de consumo, geracao e injecao sao tratadas como acumuladores. O coordinator calcula deltas entre leituras validas e distribui esses deltas nas quebras configuradas:
 
-- `daily`;
-- `weekly`;
-- `monthly`.
+- `diario`;
+- `semanal`;
+- `mensal`.
 
 Leituras temporariamente indisponiveis nao alteram a referencia nem os acumuladores.
 
 ## Persistencia
 
-O estado incremental e salvo no `Store` local do Home Assistant. A persistencia guarda referencias de leitura, acumulados por periodo, flags de reset e ledger de creditos.
+O estado incremental e salvo no `Store` local do Home Assistant. A persistencia guarda referencias de leitura, acumulados por periodo, flags de reset e registro de creditos.
 
 ## Testes
 

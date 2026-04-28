@@ -14,8 +14,8 @@
 
 Extratores internos parciais ja implementados:
 
-- `RGE SUL`: parser HTML para PIS/COFINS/ICMS (mantida pendencia de validacao mensal aberta).
-- `CEMIG-D`: parser HTML para PIS/COFINS (ICMS em fallback com pendencia de validacao oficial).
+- `RGE SUL`: analisador HTML para PIS/COFINS/ICMS (mantida pendencia de validacao mensal aberta).
+- `CEMIG-D`: analisador HTML para PIS/COFINS (ICMS em alternativo com pendencia de validacao oficial).
 
 ## Regra de suporte
 
@@ -33,10 +33,10 @@ Extratores web podem sofrer quebra por mudanca de layout. Nesses casos:
 
 1. manter ultimo valor valido;
 2. registrar diagnostico;
-3. ajustar parser;
+3. ajustar analisador;
 4. revalidar com fixture/teste.
 
-Fixtures iniciais de parser:
+Fixtures iniciais de analisador:
 
 - `tests/fixtures/cpfl_pis_cofins_sample.html`
 - `tests/fixtures/celesc_tributos_sample.html`

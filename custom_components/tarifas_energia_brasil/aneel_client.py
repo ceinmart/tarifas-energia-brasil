@@ -20,14 +20,14 @@ import aiohttp
 
 from .calculators import mwh_to_kwh
 from .const import (
-    ANEEL_METHOD_CSV_XML,
-    ANEEL_METHOD_DATASTORE_SEARCH,
-    ANEEL_METHOD_DATASTORE_SEARCH_SQL,
     ATTR_CONFIANCA_ALTA,
     ATTR_CONFIANCA_MEDIA,
-    get_aneel_method_fallback_order,
+    METODO_ANEEL_BUSCA_DADOS,
+    METODO_ANEEL_BUSCA_DADOS_SQL,
+    METODO_ANEEL_CSV_XML,
+    obter_ordem_alternativa_metodo_aneel,
 )
-from .models import CollectionMetadata
+from .models import MetadadosColeta
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,11 +67,11 @@ class AneelClient:
         concessionaria: str,
         priority_method: str,
         reference_date: date,
-    ) -> tuple[dict[str, Any], CollectionMetadata]:
+    ) -> tuple[dict[str, Any], MetadadosColeta]:
         """Coleta TE/TUSD convencional e branca em chamada otimizada."""
 
         errors: list[str] = []
-        methods = get_aneel_method_fallback_order(priority_method)
+        methods = obter_ordem_alternativa_metodo_aneel(priority_method)
         filters = {"SigAgente": concessionaria}
         for attempts, method in enumerate(methods, start=1):
             try:
@@ -81,8 +81,13 @@ class AneelClient:
                     filters=filters,
                 )
                 parsed = self._parse_tarifa_records(records, concessionaria, reference_date)
-                if parsed["convencional"]["te_r_kwh"] <= 0 or parsed["convencional"]["tusd_r_kwh"] <= 0:
-                    raise AneelClientError("Registros encontrados sem TE/TUSD convencional validos.")
+                if (
+                    parsed["convencional"]["te_r_kwh"] <= 0
+                    or parsed["convencional"]["tusd_r_kwh"] <= 0
+                ):
+                    raise AneelClientError(
+                        "Registros encontrados sem TE/TUSD convencional validos."
+                    )
                 self._log_aneel_method_success(
                     dataset="tarifas",
                     method=method,
@@ -90,7 +95,7 @@ class AneelClient:
                     filters=filters,
                 )
 
-                metadata = CollectionMetadata(
+                metadata = MetadadosColeta(
                     ultima_coleta=datetime.now().astimezone().isoformat(),
                     fonte="dados_abertos_aneel",
                     dataset="tarifas-distribuidoras-energia-eletrica",
@@ -125,11 +130,11 @@ class AneelClient:
         concessionaria: str,
         priority_method: str,
         reference_date: date,
-    ) -> tuple[dict[str, Any], CollectionMetadata]:
+    ) -> tuple[dict[str, Any], MetadadosColeta]:
         """Coleta componente TUSD_FioB considerando recursos de anos diferentes."""
 
         errors: list[str] = []
-        methods = get_aneel_method_fallback_order(priority_method)
+        methods = obter_ordem_alternativa_metodo_aneel(priority_method)
         filters = {
             "SigNomeAgente": concessionaria,
             "DscComponenteTarifario": "TUSD_FioB",
@@ -150,14 +155,12 @@ class AneelClient:
                                     concessionaria,
                                     reference_date,
                                 )
-                                if method == ANEEL_METHOD_CSV_XML
+                                if method == METODO_ANEEL_CSV_XML
                                 else None
                             ),
                         )
                     except (AneelClientError, aiohttp.ClientError, TimeoutError, ValueError) as err:
-                        resource_errors.append(
-                            f"{resource_id}: {self._describe_exception(err)}"
-                        )
+                        resource_errors.append(f"{resource_id}: {self._describe_exception(err)}")
                         self._log_aneel_resource_failure(
                             dataset="componentes-tarifarias/Fio B",
                             method=method,
@@ -184,7 +187,7 @@ class AneelClient:
                         filters=filters,
                     )
 
-                    metadata = CollectionMetadata(
+                    metadata = MetadadosColeta(
                         ultima_coleta=datetime.now().astimezone().isoformat(),
                         fonte="dados_abertos_aneel",
                         dataset="componentes-tarifarias",
@@ -226,11 +229,11 @@ class AneelClient:
         self,
         priority_method: str,
         reference_date: date,
-    ) -> tuple[dict[str, Any], CollectionMetadata]:
+    ) -> tuple[dict[str, Any], MetadadosColeta]:
         """Coleta bandeira vigente e adicional homologado."""
 
         errors: list[str] = []
-        methods = get_aneel_method_fallback_order(priority_method)
+        methods = obter_ordem_alternativa_metodo_aneel(priority_method)
         for attempts, method in enumerate(methods, start=1):
             try:
                 acionamentos = await self._collect_resource_records(
@@ -251,13 +254,12 @@ class AneelClient:
                         adicionais, vigencia["bandeira"], reference_date
                     )
 
-                metadata = CollectionMetadata(
+                metadata = MetadadosColeta(
                     ultima_coleta=datetime.now().astimezone().isoformat(),
                     fonte="dados_abertos_aneel",
                     dataset="bandeiras-tarifarias",
                     resource_id=(
-                        f"{self.RESOURCE_BANDEIRAS_ACIONAMENTO},"
-                        f"{self.RESOURCE_BANDEIRAS_ADICIONAL}"
+                        f"{self.RESOURCE_BANDEIRAS_ACIONAMENTO},{self.RESOURCE_BANDEIRAS_ADICIONAL}"
                     ),
                     metodo_acesso=method,
                     usou_fallback=attempts > 1,
@@ -301,11 +303,11 @@ class AneelClient:
     ) -> list[dict[str, Any]]:
         """Consulta registros usando o metodo de acesso selecionado."""
 
-        if method == ANEEL_METHOD_DATASTORE_SEARCH:
+        if method == METODO_ANEEL_BUSCA_DADOS:
             return await self._datastore_search_records(resource_id, filters)
-        if method == ANEEL_METHOD_DATASTORE_SEARCH_SQL:
+        if method == METODO_ANEEL_BUSCA_DADOS_SQL:
             return await self._datastore_search_sql_records(resource_id, filters)
-        if method == ANEEL_METHOD_CSV_XML:
+        if method == METODO_ANEEL_CSV_XML:
             return await self._csv_xml_records(resource_id, filters, early_stop=early_stop)
         raise AneelClientError(f"Metodo ANEEL invalido: {method}")
 
@@ -497,12 +499,9 @@ class AneelClient:
         async for chunk in response.content.iter_chunked(CSV_STREAM_CHUNK_SIZE):
             bytes_read += len(chunk)
             now = time.monotonic()
-            if (
-                resource_id
-                and (
-                    now - last_log_at >= CSV_PROGRESS_LOG_INTERVAL_SECONDS
-                    or bytes_read - last_log_bytes >= CSV_PROGRESS_LOG_INTERVAL_BYTES
-                )
+            if resource_id and (
+                now - last_log_at >= CSV_PROGRESS_LOG_INTERVAL_SECONDS
+                or bytes_read - last_log_bytes >= CSV_PROGRESS_LOG_INTERVAL_BYTES
             ):
                 _LOGGER.warning(
                     "ANEEL CSV download em andamento: resource_id=%s; bytes_baixados=%s",
@@ -726,9 +725,7 @@ class AneelClient:
                     result["vigencia_inicio"] = self._string_or_none(
                         self._pick(row, "DatInicioVigencia")
                     )
-                    result["vigencia_fim"] = self._string_or_none(
-                        self._pick(row, "DatFimVigencia")
-                    )
+                    result["vigencia_fim"] = self._string_or_none(self._pick(row, "DatFimVigencia"))
             elif "branca" in modalidade:
                 current_rank = selected_ranks["branca"][posto]
                 if self._rank_is_better(rank, current_rank):
@@ -790,9 +787,7 @@ class AneelClient:
         }
 
         valid_rows = [
-            row
-            for row in records
-            if self._row_is_valid_fio_b(row, concessionaria, reference_date)
+            row for row in records if self._row_is_valid_fio_b(row, concessionaria, reference_date)
         ]
         valid_rows.sort(
             key=lambda row: _parse_any_date(self._pick(row, "DatInicioVigencia")) or date.min,
@@ -820,9 +815,7 @@ class AneelClient:
                     result["vigencia_inicio"] = self._string_or_none(
                         self._pick(row, "DatInicioVigencia")
                     )
-                    result["vigencia_fim"] = self._string_or_none(
-                        self._pick(row, "DatFimVigencia")
-                    )
+                    result["vigencia_fim"] = self._string_or_none(self._pick(row, "DatFimVigencia"))
             elif "branca" in modalidade:
                 current_rank = selected_ranks["branca"][posto]
                 if self._rank_is_better(rank, current_rank):
@@ -851,18 +844,10 @@ class AneelClient:
     def _fio_b_selection_rank(self, row: dict[str, Any]) -> tuple[int, ...]:
         """Prioriza Fio B residencial B1 de aplicacao e sem detalhe especial."""
 
-        subgrupo = _normalize(
-            self._pick_first(row, "DscSubGrupoTarifario", "DscSubGrupo")
-        )
-        classe = _normalize(
-            self._pick_first(row, "DscClasseConsumidor", "DscClasse")
-        )
-        subclasse = _normalize(
-            self._pick_first(row, "DscSubClasseConsumidor", "DscSubClasse")
-        )
-        detalhe = _normalize(
-            self._pick_first(row, "DscDetalheConsumidor", "DscDetalhe")
-        )
+        subgrupo = _normalize(self._pick_first(row, "DscSubGrupoTarifario", "DscSubGrupo"))
+        classe = _normalize(self._pick_first(row, "DscClasseConsumidor", "DscClasse"))
+        subclasse = _normalize(self._pick_first(row, "DscSubClasseConsumidor", "DscSubClasse"))
+        detalhe = _normalize(self._pick_first(row, "DscDetalheConsumidor", "DscDetalhe"))
         base = _normalize(self._pick(row, "DscBaseTarifaria"))
         return (
             1 if subgrupo == "b1" else 0,
@@ -888,9 +873,7 @@ class AneelClient:
             "score": list(score),
             "vigencia_inicio": self._string_or_none(self._pick(row, "DatInicioVigencia")),
             "vigencia_fim": self._string_or_none(self._pick(row, "DatFimVigencia")),
-            "modalidade": self._string_or_none(
-                self._pick_first(row, "DscModalidadeTarifaria")
-            ),
+            "modalidade": self._string_or_none(self._pick_first(row, "DscModalidadeTarifaria")),
             "posto": self._string_or_none(
                 self._pick_first(row, "NomPostoTarifario", "DscPostoTarifario")
             ),
@@ -1115,8 +1098,7 @@ class AneelClient:
         """Identifica subclasses sociais/baixa renda que nao sao o alvo padrao."""
 
         return any(
-            keyword in subclasse
-            for keyword in ("baixa renda", "tarifa social", "desconto social")
+            keyword in subclasse for keyword in ("baixa renda", "tarifa social", "desconto social")
         )
 
     @staticmethod

@@ -18,7 +18,7 @@
       }
     },
     "error": {
-      "supply_type_required": "Informe tipo de fornecimento quando houver entidade de geracao."
+      "tipo_fornecimento_obrigatorio": "Informe tipo de fornecimento quando houver entidade de geracao."
     },
     "abort": {
       "already_configured": "Esta concessionaria ja esta configurada."
@@ -32,7 +32,7 @@
       }
     },
     "error": {
-      "supply_type_required": "Informe tipo de fornecimento quando houver entidade de geracao."
+      "tipo_fornecimento_obrigatorio": "Informe tipo de fornecimento quando houver entidade de geracao."
     }
   }
 }

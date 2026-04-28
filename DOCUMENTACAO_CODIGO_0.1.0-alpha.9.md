@@ -35,10 +35,10 @@ flowchart TD
     C --> E["extract_tributos"]
     C --> F["calculators.py"]
     C --> G["tarifa_branca_time.py"]
-    C --> H["credito_ledger.py"]
+    C --> H["credito_registro.py"]
     D --> I["datasets ANEEL"]
     E --> J["sites das concessionarias"]
-    F --> K["SnapshotCalculo"]
+    F --> K["ResultadoCalculo"]
     G --> K
     H --> K
     K --> L["sensor.py"]
@@ -51,11 +51,11 @@ flowchart TD
 | Caminho | Finalidade |
 |---|---|
 | `custom_components/tarifas_energia_brasil/` | Codigo da integracao Home Assistant. |
-| `custom_components/tarifas_energia_brasil/tributos/` | Parsers e extratores de tributos de concessionarias. |
+| `custom_components/tarifas_energia_brasil/tributos/` | Analisadors e extratores de tributos de concessionarias. |
 | `custom_components/tarifas_energia_brasil/translations/` | Textos de UI para o Home Assistant. |
 | `custom_components/tarifas_energia_brasil/brand/` | Icone da integracao. |
 | `tests/` | Testes unitarios e stubs de Home Assistant. |
-| `tests/fixtures/` | Amostras HTML usadas pelos parsers de tributos. |
+| `tests/fixtures/` | Amostras HTML usadas pelos analisadors de tributos. |
 | `docs/` | Documentacao auxiliar por tema. |
 
 ## Modulos principais
@@ -63,16 +63,16 @@ flowchart TD
 | Modulo | Responsabilidade |
 |---|---|
 | `__init__.py` | Registra a integracao, cria o coordinator, encaminha plataformas, inicia listeners e persiste estado no unload. |
-| `const.py` | Centraliza dominio, versao, constantes, chaves de configuracao, defaults, concessionarias, grupos de entidade e fallback ANEEL. |
+| `const.py` | Centraliza dominio, versao, constantes, chaves de configuracao, padraos, concessionarias, grupos de entidade e alternativo ANEEL. |
 | `config_flow.py` | Implementa fluxo inicial e options flow no Home Assistant. |
-| `coordinator.py` | Orquestra coleta, calculos, acumuladores, persistencia, ledger SCEE e diagnosticos. |
-| `aneel_client.py` | Cliente CKAN da ANEEL com fallback entre metodos de acesso. |
+| `coordinator.py` | Orquestra coleta, calculos, acumuladores, persistencia, registro SCEE e diagnosticos. |
+| `aneel_client.py` | Cliente CKAN da ANEEL com alternativo entre metodos de acesso. |
 | `calculators.py` | Funcoes puras de conversao, tarifa, tributos, disponibilidade, Fio B, bandeira e SCEE. |
-| `credito_ledger.py` | Controle dos creditos de energia por competencia mensal. |
+| `credito_registro.py` | Controle dos creditos de energia por competencia mensal. |
 | `tarifa_branca_time.py` | Horarios, feriados, posto tarifario vigente e rateio temporal da Tarifa Branca. |
 | `sensor.py` | Definicao e criacao das entidades `sensor`. |
 | `models.py` | Dataclasses compartilhadas entre coleta, calculo e publicacao. |
-| `diagnostics.py` | Payload de diagnostico redigindo entidades configuradas. |
+| `diagnosticos.py` | Payload de diagnostico redigindo entidades configuradas. |
 
 ## Ciclo de vida no Home Assistant
 
@@ -97,7 +97,7 @@ O fluxo inicial (`TarifasEnergiaBrasilConfigFlow`) pede:
 - `entidade_geracao_kwh`: sensor acumulado de geracao, opcional.
 - `entidade_injecao_kwh`: sensor acumulado de energia injetada, opcional e recomendado para SCEE/auto-consumo preciso.
 - `tipo_fornecimento`: `monofasico`, `bifasico` ou `trifasico`.
-- `quebras_calculo`: `daily`, `weekly` e/ou `monthly`.
+- `quebras_calculo`: `diario`, `semanal` e/ou `mensal`.
 
 O options flow tambem permite:
 
@@ -106,11 +106,11 @@ O options flow tambem permite:
 - sobrescrever horarios da Tarifa Branca;
 - informar feriados extras em `YYYY-MM-DD`.
 
-Novas entradas iniciam Tarifa Branca desabilitada por default, mas entradas antigas mantem compatibilidade quando a chave ainda nao existe.
+Novas entradas iniciam Tarifa Branca desabilitada por padrao, mas entradas antigas mantem compatibilidade quando a chave ainda nao existe.
 
 ## Concessionarias
 
-As concessionarias prontas para selecao no fluxo sao retornadas por `get_supported_concessionarias_for_flow()` a partir de `SUPPORTED_CONCESSIONARIAS`.
+As concessionarias prontas para selecao no fluxo sao retornadas por `obter_concessionarias_suportadas_para_fluxo()` a partir de `CONCESSIONARIAS_SUPORTADAS`.
 
 Na versao atual:
 
@@ -133,7 +133,7 @@ Metodos suportados:
 - `datastore_search_sql`;
 - `csv_xml`.
 
-A ordem efetiva e montada por `get_aneel_method_fallback_order()`, colocando o metodo escolhido pelo usuario primeiro e os demais como fallback.
+A ordem efetiva e montada por `obter_ordem_alternativa_metodo_aneel()`, colocando o metodo escolhido pelo usuario primeiro e os demais como alternativo.
 
 Datasets usados:
 
@@ -148,7 +148,7 @@ O cliente seleciona linhas residenciais B1 e evita linhas sociais, baixa renda, 
 
 ## Tributos
 
-`extract_tributos()` retorna `TributosData` com:
+`extract_tributos()` retorna `DadosTributos` com:
 
 - concessionaria;
 - competencia;
@@ -159,13 +159,13 @@ O cliente seleciona linhas residenciais B1 e evita linhas sociais, baixa renda, 
 - confianca;
 - erros e pendencias.
 
-Os parsers em `tributos/parsers.py` transformam HTML das concessionarias em aliquotas normalizadas. Os fixtures em `tests/fixtures` protegem contra regressao de parser.
+Os analisadors em `tributos/analisadors.py` transformam HTML das concessionarias em aliquotas normalizadas. Os fixtures em `tests/fixtures` protegem contra regressao de analisador.
 
-Quando ha regra conhecida de ICMS por faixa, `resolve_icms_percent()` aplica a aliquota conforme consumo mensal apurado. Quando nao ha historico suficiente no bootstrap, o coordinator usa fallback da fonte de tributos para evitar escolher uma faixa indevida.
+Quando ha regra conhecida de ICMS por faixa, `resolve_icms_percent()` aplica a aliquota conforme consumo mensal apurado. Quando nao ha historico suficiente no bootstrap, o coordinator usa alternativo da fonte de tributos para evitar escolher uma faixa indevida.
 
 ## Objetos de dados
 
-### `CollectionMetadata`
+### `MetadadosColeta`
 
 Metadados de coleta associados a cada sensor:
 
@@ -174,16 +174,16 @@ Metadados de coleta associados a cada sensor:
 - `dataset`;
 - `resource_id`;
 - `metodo_acesso`;
-- `usou_fallback`;
+- `usou_alternativo`;
 - `tentativas`;
 - `mensagem_erro`;
 - `confianca_fonte`;
 - `vigencia_inicio`;
 - `vigencia_fim`.
 
-`as_attributes()` remove valores nulos antes de publicar atributos.
+`como_atributos()` remove valores nulos antes de publicar atributos.
 
-### `TributosData`
+### `DadosTributos`
 
 Representa aliquotas de uma concessionaria:
 
@@ -193,15 +193,15 @@ Representa aliquotas de uma concessionaria:
 - `fonte`;
 - `confianca`.
 
-### `SnapshotCalculo`
+### `ResultadoCalculo`
 
 Objeto entregue pelo coordinator aos sensores:
 
-- `updated_at`: instante da atualizacao;
+- `atualizado_em`: instante da atualizacao;
 - `concessionaria`: concessionaria da entrada;
-- `values`: chaves e valores finais publicados;
-- `collections_by_key`: metadados por chave;
-- `diagnostics`: informacoes tecnicas de apoio.
+- `valores`: chaves e valores finais publicados;
+- `coletas_por_chave`: metadados por chave;
+- `diagnosticos`: informacoes tecnicas de apoio.
 
 ### `CreditoEntry`
 
@@ -212,7 +212,7 @@ Representa creditos SCEE:
 
 ## Coordinator
 
-`TarifasEnergiaBrasilCoordinator` e a classe central. Ela herda de `DataUpdateCoordinator[SnapshotCalculo]`.
+`TarifasEnergiaBrasilCoordinator` e a classe central. Ela herda de `DataUpdateCoordinator[ResultadoCalculo]`.
 
 Estado interno principal:
 
@@ -222,7 +222,7 @@ Estado interno principal:
 - `_geracao_period_state`;
 - `_injecao_period_state`;
 - `_consumo_tarifa_branca_state`;
-- `_creditos_ledger`;
+- `_creditos_registro`;
 - `_credito_estimado_atual_kwh`;
 - `_credito_consumido_estimado_atual_kwh`;
 - `_ultimo_ciclo_mensal`;
@@ -245,12 +245,12 @@ Estado interno principal:
 5. Processa acumuladores de periodo e Tarifa Branca.
 6. Resolve ICMS aplicado.
 7. Calcula tarifas, Fio B, bandeira, disponibilidade, SCEE e valores de conta.
-8. Monta `collections_by_key`.
-9. Monta `diagnostics`.
+8. Monta `coletas_por_chave`.
+9. Monta `diagnosticos`.
 10. Agenda persistencia de estado.
-11. Retorna `SnapshotCalculo`.
+11. Retorna `ResultadoCalculo`.
 
-Se a coleta externa falha mas ja existe snapshot anterior, a integracao mantem o ultimo valor valido e adiciona informacoes de erro nos diagnosticos.
+Se a coleta externa falha mas ja existe resultado anterior, a integracao mantem o ultimo valor valido e adiciona informacoes de erro nos diagnosticos.
 
 ### Atualizacao por listener
 
@@ -264,9 +264,9 @@ A integracao trabalha com entidades acumuladas. Por isso ela transforma leituras
 
 Quebras suportadas:
 
-- `daily`: chave `YYYY-MM-DD`;
-- `weekly`: chave ISO `YYYY-WNN`;
-- `monthly`: chave `YYYY-MM-DNN`, onde `NN` e o dia de leitura configurado.
+- `diario`: chave `YYYY-MM-DD`;
+- `semanal`: chave ISO `YYYY-WNN`;
+- `mensal`: chave `YYYY-MM-DNN`, onde `NN` e o dia de leitura configurado.
 
 Funcoes relevantes:
 
@@ -287,13 +287,13 @@ Quando uma leitura atual e menor que a anterior, o coordinator entende como rese
 - `intermediario`;
 - `ponta`.
 
-O modulo define defaults por concessionaria e permite override no options flow. Finais de semana e feriados sao tratados como `fora_ponta`.
+O modulo define padraos por concessionaria e permite override no options flow. Finais de semana e feriados sao tratados como `fora_ponta`.
 
 Funcoes principais:
 
 | Funcao | Papel |
 |---|---|
-| `resolve_tarifa_branca_schedule()` | Combina defaults e overrides do usuario. |
+| `resolve_tarifa_branca_schedule()` | Combina padraos e overrides do usuario. |
 | `parse_extra_holidays()` | Converte feriados extras em datas. |
 | `build_holiday_calendar()` | Une feriados nacionais e extras. |
 | `resolve_tarifa_branca_posto()` | Classifica um instante em posto tarifario. |
@@ -393,11 +393,11 @@ auto_consumo_kwh = max(geracao_acumulada_kwh - injecao_acumulada_kwh, 0)
 auto_consumo_reais = auto_consumo_kwh * tarifa_convencional_final_r_kwh
 ```
 
-Sem entidade de injecao, o calculo segue em modo estimado/fallback usando os dados disponiveis.
+Sem entidade de injecao, o calculo segue em modo estimado/alternativo usando os dados disponiveis.
 
-## Ledger de creditos
+## Registro de creditos
 
-`credito_ledger.py` guarda creditos por competencia mensal. A janela de validade padrao e 60 meses.
+`credito_registro.py` guarda creditos por competencia mensal. A janela de validade padrao e 60 meses.
 
 Funcoes principais:
 
@@ -431,15 +431,15 @@ Dados persistidos:
 - ultimo ciclo mensal;
 - credito estimado atual;
 - credito consumido estimado atual;
-- ledger de creditos.
+- registro de creditos.
 
 `async_persist_state()` salva imediatamente. `_schedule_state_save()` agenda save com atraso curto para reduzir escrita em disco durante eventos frequentes.
 
 ## Sensores
 
-`sensor.py` define `TarifaSensorDescription`, uma extensao de `SensorEntityDescription` com:
+`sensor.py` define `DescricaoSensorTarifa`, uma extensao de `SensorEntityDescription` com:
 
-- `value_key`;
+- `chave_valor`;
 - `group`.
 
 Grupos:
@@ -448,13 +448,13 @@ Grupos:
 - `geracao`;
 - `tarifa_branca`.
 
-`build_sensor_descriptions()` combina sensores base e sensores dinamicos conforme:
+`montar_descricoes_sensores()` combina sensores base e sensores dinamicos conforme:
 
 - quebras habilitadas;
 - grupo Geracao/SCEE habilitado;
 - grupo Tarifa Branca habilitado.
 
-Todos os sensores leem valores de `coordinator.data.values`. Numeros `float` sao arredondados para 4 casas decimais em `native_value`.
+Todos os sensores leem valores de `coordinator.data.valores`. Numeros `float` sao arredondados para 4 casas decimais em `native_value`.
 
 ### Sensores base
 
@@ -479,20 +479,20 @@ Cada sensor publica:
 
 - `concessionaria`;
 - `ultima_atualizacao`;
-- metadados de coleta vindos de `CollectionMetadata`;
+- metadados de coleta vindos de `MetadadosColeta`;
 - `prioridade_aneel`;
 - `mensagem_erro`.
 
-Esses atributos ajudam a explicar fonte, fallback e vigencia de cada valor.
+Esses atributos ajudam a explicar fonte, alternativo e vigencia de cada valor.
 
 ## Diagnosticos
 
-`diagnostics.py` expoe:
+`diagnosticos.py` expoe:
 
 - dados e options da config entry;
 - status da ultima atualizacao;
 - excecao mais recente;
-- snapshot de valores;
+- resultado de valores;
 - diagnosticos do coordinator.
 
 As entidades de consumo, geracao e injecao sao redigidas por `async_redact_data()`.
@@ -510,7 +510,7 @@ Campos importantes do coordinator:
 - `saldo_creditos_disponiveis_kwh`;
 - `credito_consumido_estimado_atual_kwh`;
 - `credito_gerado_estimado_atual_kwh`;
-- `ledger_creditos`;
+- `registro_creditos`;
 - `icms_source`;
 - `tarifas_selection_debug`;
 - `fio_b_selection_debug`.
@@ -522,9 +522,9 @@ Falhas externas podem acontecer por indisponibilidade de API, mudanca de layout 
 Comportamento esperado:
 
 - Tentar o metodo prioritario ANEEL.
-- Tentar os metodos restantes em fallback.
-- Em falha geral com snapshot anterior, manter ultimo valor valido.
-- Em falha inicial sem snapshot, levantar `UpdateFailed`.
+- Tentar os metodos restantes em alternativo.
+- Em falha geral com resultado anterior, manter ultimo valor valido.
+- Em falha inicial sem resultado, levantar `UpdateFailed`.
 - Publicar erro em diagnosticos quando possivel.
 
 Nenhuma falha externa deve zerar sensores que ja tinham valor valido.
@@ -539,12 +539,12 @@ Arquivos principais:
 |---|---|
 | `tests/test_calculators.py` | Funcoes puras de calculo. |
 | `tests/test_aneel_client.py` | Parse e selecao de linhas ANEEL. |
-| `tests/test_config_flow.py` | Fluxo inicial, options, defaults e validacoes. |
+| `tests/test_config_flow.py` | Fluxo inicial, options, padraos e validacoes. |
 | `tests/test_sensor_groups.py` | Criacao condicional de sensores por grupo e quebra. |
 | `tests/test_coordinator_reset.py` | Acumuladores, reset/rebase, diagnosticos e valores dinamicos. |
 | `tests/test_tarifa_branca_time.py` | Horarios, feriados e rateio temporal. |
-| `tests/test_tributos_parsers.py` | Parsers HTML de concessionarias. |
-| `tests/test_credito_ledger.py` | Ledger de creditos SCEE. |
+| `tests/test_tributos_analisadors.py` | Analisadors HTML de concessionarias. |
+| `tests/test_credito_registro.py` | Registro de creditos SCEE. |
 | `tests/test_icms_rules.py` | ICMS por faixa. |
 
 Comandos recomendados:
@@ -560,16 +560,16 @@ python -m ruff check .
 
 1. Criar ou validar extrator de tributos.
 2. Adicionar fixture HTML em `tests/fixtures`.
-3. Cobrir parser em `tests/test_tributos_parsers.py`.
-4. Atualizar `SUPPORTED_CONCESSIONARIAS` em `const.py`.
+3. Cobrir analisador em `tests/test_tributos_analisadors.py`.
+4. Atualizar `CONCESSIONARIAS_SUPORTADAS` em `const.py`.
 5. Marcar `suportada=True` somente quando TE/TUSD, tributos e casos basicos estiverem validados.
 6. Atualizar README e documentacao tecnica.
 
 ### Adicionar novo sensor
 
-1. Adicionar chave em `values` no coordinator.
-2. Associar metadado em `_build_collections_by_key()` se necessario.
-3. Criar `TarifaSensorDescription` em `sensor.py`.
+1. Adicionar chave em `valores` no coordinator.
+2. Associar metadado em `_build_coletas_por_chave()` se necessario.
+3. Criar `DescricaoSensorTarifa` em `sensor.py`.
 4. Definir grupo correto.
 5. Adicionar teste de criacao e valor.
 6. Documentar o sensor.
@@ -594,7 +594,7 @@ python -m ruff check .
 - A Tarifa Branca e estimada por rateio temporal quando a entidade de consumo nao informa consumo por posto.
 - Leituras muito espacadas reduzem a confianca da classificacao por posto.
 - O SCEE e uma estimativa operacional e deve ser validado contra faturas reais para casos regulatorios complexos.
-- Sites de concessionarias podem mudar layout e quebrar parsers.
+- Sites de concessionarias podem mudar layout e quebrar analisadors.
 - A precisao depende da qualidade das entidades acumuladas configuradas no Home Assistant.
 
 ## Referencias rapidas
@@ -602,12 +602,12 @@ python -m ruff check .
 | Tema | Arquivo inicial |
 |---|---|
 | Setup da integracao | `custom_components/tarifas_energia_brasil/__init__.py` |
-| Constantes e defaults | `custom_components/tarifas_energia_brasil/const.py` |
+| Constantes e padraos | `custom_components/tarifas_energia_brasil/const.py` |
 | Fluxo de UI | `custom_components/tarifas_energia_brasil/config_flow.py` |
 | Orquestracao | `custom_components/tarifas_energia_brasil/coordinator.py` |
 | Calculos | `custom_components/tarifas_energia_brasil/calculators.py` |
 | Sensores | `custom_components/tarifas_energia_brasil/sensor.py` |
 | Tarifa Branca | `custom_components/tarifas_energia_brasil/tarifa_branca_time.py` |
-| Creditos SCEE | `custom_components/tarifas_energia_brasil/credito_ledger.py` |
+| Creditos SCEE | `custom_components/tarifas_energia_brasil/credito_registro.py` |
 | Coleta ANEEL | `custom_components/tarifas_energia_brasil/aneel_client.py` |
 | Tributos | `custom_components/tarifas_energia_brasil/tributos/` |

@@ -13,7 +13,7 @@ from typing import Final
 import aiohttp
 
 from ..const import ATTR_CONFIANCA_ALTA, ATTR_CONFIANCA_MEDIA
-from ..models import CollectionMetadata, TributosData
+from ..models import DadosTributos, MetadadosColeta
 from .parsers import (
     parse_celesc_tributos_html,
     parse_cemig_tributos_html,
@@ -84,19 +84,17 @@ class TributosExtractorError(Exception):
 async def extract_tributos(
     session: aiohttp.ClientSession,
     concessionaria: str,
-) -> tuple[TributosData, CollectionMetadata]:
+) -> tuple[DadosTributos, MetadadosColeta]:
     """Extrai tributos da concessionaria com fallback controlado."""
 
     normalized = concessionaria.strip().upper()
     fallback = _TRIBUTOS_FALLBACK.get(normalized)
     if fallback is None:
-        raise TributosExtractorError(
-            f"Concessionaria sem extrator validado: {concessionaria}"
-        )
+        raise TributosExtractorError(f"Concessionaria sem extrator validado: {concessionaria}")
 
     now = datetime.now().astimezone()
     competencia = now.strftime("%Y-%m")
-    coleta_base = CollectionMetadata(
+    coleta_base = MetadadosColeta(
         ultima_coleta=now.isoformat(),
         fonte=fallback.fonte,
         dataset="fonte_web_concessionaria",
@@ -111,7 +109,7 @@ async def extract_tributos(
             concessionaria=normalized,
             fallback=fallback,
         )
-        tributos = TributosData(
+        tributos = DadosTributos(
             concessionaria=normalized,
             competencia=competencia,
             pis_percent=pis,
@@ -127,7 +125,7 @@ async def extract_tributos(
         coleta_base.mensagem_erro = f"Parser web indisponivel, fallback aplicado: {err}"
         coleta_base.tentativas = 2
 
-    tributos = TributosData(
+    tributos = DadosTributos(
         concessionaria=normalized,
         competencia=competencia,
         pis_percent=fallback.pis,

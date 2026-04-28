@@ -11,26 +11,26 @@ Este documento registra o estado tecnico da release `0.1.3`. Alteracoes historic
 
 A versao `0.1.3` corrige dois pontos operacionais importantes:
 
-- restauracao do ultimo snapshot valido salvo no Home Assistant durante o setup;
-- leitura correta do fallback CSV da ANEEL para Fio B da `CPFL-PIRATINING`.
+- restauracao do ultimo resultado valido salvo no Home Assistant durante o setup;
+- leitura correta do alternativo CSV da ANEEL para Fio B da `CPFL-PIRATINING`.
 
-## Snapshot em cache
+## Resultado em memoria local
 
-O coordinator passa a persistir `last_snapshot` no `Store` local do Home Assistant. Esse snapshot contem:
+O coordinator passa a persistir `last_resultado` no `Store` local do Home Assistant. Esse resultado contem:
 
-- `updated_at`;
+- `atualizado_em`;
 - `concessionaria`;
-- `values`;
-- `collections_by_key`;
-- `diagnostics`.
+- `valores`;
+- `coletas_por_chave`;
+- `diagnosticos`.
 
 Durante o setup, `async_ensure_state_loaded()` e executado antes da criacao das entidades, permitindo que sensores nascam com os ultimos valores validos quando a coleta externa inicial falhar.
 
-Se a coleta falhar e houver `self.data`, o coordinator retorna um novo `SnapshotCalculo` reaproveitando os valores anteriores e adicionando diagnosticos de falha.
+Se a coleta falhar e houver `self.data`, o coordinator retorna um novo `ResultadoCalculo` reaproveitando os valores anteriores e adicionando diagnosticos de falha.
 
-## Fallback CSV da ANEEL
+## Alternativo CSV da ANEEL
 
-O fallback CSV passa a:
+O alternativo CSV passa a:
 
 - processar a resposta em chunks;
 - decodificar com `latin-1`;
@@ -52,22 +52,22 @@ O filtro usado para componentes tarifarios e:
 }
 ```
 
-O parser prioriza linha residencial B1, modalidade adequada, `Tarifa de Aplicacao` e vigencia valida.
+O analisador prioriza linha residencial B1, modalidade adequada, `Tarifa de Aplicacao` e vigencia valida.
 
 ## Modulos afetados
 
 | Modulo | Mudanca |
 |---|---|
 | `__init__.py` | Carrega estado persistido antes de criar entidades. |
-| `coordinator.py` | Serializa/restaura `last_snapshot`. |
+| `coordinator.py` | Serializa/restaura `last_resultado`. |
 | `aneel_client.py` | CSV streaming com delimitador detectado e encoding compativel. |
-| `tests/test_coordinator_reset.py` | Testa restauracao de snapshot. |
+| `tests/test_coordinator_reset.py` | Testa restauracao de resultado. |
 | `tests/test_aneel_client.py` | Testa CSV latin-1, delimitador `;` e Fio B vigente da CPFL-PIRATINING. |
 
 ## Testes
 
 A release adicionou cobertura para:
 
-- restauracao de snapshot apos restart;
+- restauracao de resultado apos restart;
 - CSV ANEEL com chunks quebrados, delimitador `;` e encoding latin-1;
 - linhas vigentes de Fio B da CPFL-PIRATINING.

@@ -32,26 +32,26 @@ from .calculators import (
     disponibilidade_minima_kwh,
 )
 from .const import (
-    BREAKDOWN_DAILY,
-    BREAKDOWN_MONTHLY,
-    BREAKDOWN_WEEKLY,
-    CONF_ANEEL_METHOD,
-    CONF_BREAKDOWNS,
     CONF_CONCESSIONARIA,
-    CONF_CONSUMPTION_ENTITY,
-    CONF_GENERATION_ENTITY,
-    CONF_INJECTION_ENTITY,
-    CONF_READING_DAY,
-    CONF_SUPPLY_TYPE,
-    CONF_TB_EXTRA_HOLIDAYS,
-    CONF_UPDATE_HOURS,
-    DEFAULT_ANEEL_METHOD,
-    DEFAULT_BREAKDOWNS,
-    DEFAULT_READING_DAY,
-    DEFAULT_UPDATE_HOURS,
+    CONF_DIA_LEITURA,
+    CONF_ENTIDADE_CONSUMO,
+    CONF_ENTIDADE_GERACAO,
+    CONF_ENTIDADE_INJECAO,
+    CONF_HORAS_ATUALIZACAO,
+    CONF_METODO_ANEEL,
+    CONF_QUEBRAS_CALCULO,
+    CONF_TB_FERIADOS_EXTRAS,
+    CONF_TIPO_FORNECIMENTO,
+    DIA_LEITURA_PADRAO,
     DOMAIN,
-    SUPPLY_MONOPHASE,
-    VALID_BREAKDOWNS,
+    FORNECIMENTO_MONOFASICO,
+    HORAS_ATUALIZACAO_PADRAO,
+    METODO_ANEEL_PADRAO,
+    QUEBRA_DIARIA,
+    QUEBRA_MENSAL,
+    QUEBRA_SEMANAL,
+    QUEBRAS_PADRAO,
+    QUEBRAS_VALIDAS,
 )
 from .credito_ledger import (
     CreditoEntry,
@@ -64,7 +64,7 @@ from .credito_ledger import (
     total_credits_kwh,
 )
 from .icms_rules import build_icms_calculation_attributes, resolve_icms_percent
-from .models import CollectionMetadata, SnapshotCalculo
+from .models import MetadadosColeta, ResultadoCalculo
 from .tarifa_branca_time import (
     POSTOS_TARIFA_BRANCA,
     build_holiday_calendar,
@@ -80,7 +80,7 @@ _LOGGER = logging.getLogger(__name__)
 _STATE_STORAGE_VERSION = 1
 
 
-class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
+class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
     """Orquestra coleta externa, fallback e calculos da integracao."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -133,9 +133,9 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         """Cria estrutura de estado para acumuladores por periodo."""
 
         return {
-            BREAKDOWN_DAILY: {"key": None, "kwh": 0.0},
-            BREAKDOWN_WEEKLY: {"key": None, "kwh": 0.0},
-            BREAKDOWN_MONTHLY: {"key": None, "kwh": 0.0},
+            QUEBRA_DIARIA: {"key": None, "kwh": 0.0},
+            QUEBRA_SEMANAL: {"key": None, "kwh": 0.0},
+            QUEBRA_MENSAL: {"key": None, "kwh": 0.0},
         }
 
     @staticmethod
@@ -143,15 +143,15 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         """Cria estrutura de acumuladores por posto para a Tarifa Branca."""
 
         return {
-            BREAKDOWN_DAILY: {
+            QUEBRA_DIARIA: {
                 "key": None,
                 "postos": {posto: 0.0 for posto in POSTOS_TARIFA_BRANCA},
             },
-            BREAKDOWN_WEEKLY: {
+            QUEBRA_SEMANAL: {
                 "key": None,
                 "postos": {posto: 0.0 for posto in POSTOS_TARIFA_BRANCA},
             },
-            BREAKDOWN_MONTHLY: {
+            QUEBRA_MENSAL: {
                 "key": None,
                 "postos": {posto: 0.0 for posto in POSTOS_TARIFA_BRANCA},
             },
@@ -198,9 +198,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                     loaded_consumo_tarifa_branca
                 )
 
-            self._ultimo_ciclo_mensal = self._as_str_or_none(
-                payload.get("ultimo_ciclo_mensal")
-            )
+            self._ultimo_ciclo_mensal = self._as_str_or_none(payload.get("ultimo_ciclo_mensal"))
             self._credito_estimado_atual_kwh = max(
                 self._as_float(payload.get("credito_estimado_atual_kwh"), 0.0),
                 0.0,
@@ -264,31 +262,30 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         if self.data is None:
             return None
         return {
-            "updated_at": self.data.updated_at.isoformat(),
+            "atualizado_em": self.data.atualizado_em.isoformat(),
             "concessionaria": self.data.concessionaria,
-            "values": self.data.values,
-            "collections_by_key": {
-                key: asdict(metadata)
-                for key, metadata in self.data.collections_by_key.items()
+            "valores": self.data.valores,
+            "coletas_por_chave": {
+                key: asdict(metadata) for key, metadata in self.data.coletas_por_chave.items()
             },
-            "diagnostics": self.data.diagnostics,
+            "diagnosticos": self.data.diagnosticos,
         }
 
-    def _restore_cached_snapshot(self, payload: Any) -> SnapshotCalculo | None:
+    def _restore_cached_snapshot(self, payload: Any) -> ResultadoCalculo | None:
         """Restaura snapshot persistido para evitar sensores vazios no boot."""
 
         if not isinstance(payload, dict):
             return None
-        updated_at = self._as_datetime_or_none(payload.get("updated_at"))
+        atualizado_em = self._as_datetime_or_none(payload.get("atualizado_em"))
         concessionaria = self._as_str_or_none(payload.get("concessionaria"))
-        values = payload.get("values")
-        if updated_at is None or concessionaria is None or not isinstance(values, dict):
+        valores = payload.get("valores")
+        if atualizado_em is None or concessionaria is None or not isinstance(valores, dict):
             return None
 
-        collections_by_key: dict[str, CollectionMetadata] = {}
-        raw_collections = payload.get("collections_by_key")
+        coletas_por_chave: dict[str, MetadadosColeta] = {}
+        raw_collections = payload.get("coletas_por_chave")
         if isinstance(raw_collections, dict):
-            allowed_fields = set(CollectionMetadata.__dataclass_fields__)
+            allowed_fields = set(MetadadosColeta.__dataclass_fields__)
             for key, metadata_payload in raw_collections.items():
                 if not isinstance(metadata_payload, dict):
                     continue
@@ -297,18 +294,18 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                     for field in allowed_fields
                     if field in metadata_payload
                 }
-                collections_by_key[str(key)] = CollectionMetadata(**metadata_kwargs)
+                coletas_por_chave[str(key)] = MetadadosColeta(**metadata_kwargs)
 
-        diagnostics = payload.get("diagnostics")
-        restored_diagnostics = dict(diagnostics) if isinstance(diagnostics, dict) else {}
-        restored_diagnostics["snapshot_restaurado_de_cache"] = True
+        diagnosticos = payload.get("diagnosticos")
+        restored_diagnosticos = dict(diagnosticos) if isinstance(diagnosticos, dict) else {}
+        restored_diagnosticos["snapshot_restaurado_de_cache"] = True
 
-        return SnapshotCalculo(
-            updated_at=updated_at,
+        return ResultadoCalculo(
+            atualizado_em=atualizado_em,
             concessionaria=concessionaria,
-            values=dict(values),
-            collections_by_key=collections_by_key,
-            diagnostics=restored_diagnostics,
+            valores=dict(valores),
+            coletas_por_chave=coletas_por_chave,
+            diagnosticos=restored_diagnosticos,
         )
 
     @staticmethod
@@ -316,7 +313,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         """Mescla payload persistido com estrutura padrao dos periodos."""
 
         merged = TarifasEnergiaBrasilCoordinator._new_period_state()
-        for key in VALID_BREAKDOWNS:
+        for key in QUEBRAS_VALIDAS:
             incoming = payload.get(key)
             if isinstance(incoming, dict):
                 merged[key]["key"] = incoming.get("key")
@@ -328,7 +325,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         """Mescla payload persistido de acumuladores por posto."""
 
         merged = TarifasEnergiaBrasilCoordinator._new_posto_period_state()
-        for key in VALID_BREAKDOWNS:
+        for key in QUEBRAS_VALIDAS:
             incoming = payload.get(key)
             if not isinstance(incoming, dict):
                 continue
@@ -387,9 +384,9 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
 
         tracked = []
         for entity_id in (
-            self._effective_value(CONF_CONSUMPTION_ENTITY),
-            self._effective_value(CONF_GENERATION_ENTITY),
-            self._effective_value(CONF_INJECTION_ENTITY),
+            self._effective_value(CONF_ENTIDADE_CONSUMO),
+            self._effective_value(CONF_ENTIDADE_GERACAO),
+            self._effective_value(CONF_ENTIDADE_INJECAO),
         ):
             if isinstance(entity_id, str) and entity_id and entity_id not in tracked:
                 tracked.append(entity_id)
@@ -430,60 +427,50 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
 
         self._process_energy_states(
             now=now,
-            consumo_total_kwh=self._read_entity_kwh(
-                self._effective_value(CONF_CONSUMPTION_ENTITY)
-            ),
-            geracao_total_kwh=self._read_entity_kwh(
-                self._effective_value(CONF_GENERATION_ENTITY)
-            ),
-            injecao_total_kwh=self._read_entity_kwh(
-                self._effective_value(CONF_INJECTION_ENTITY)
-            ),
-            reading_day=int(self._effective_value(CONF_READING_DAY, DEFAULT_READING_DAY)),
+            consumo_total_kwh=self._read_entity_kwh(self._effective_value(CONF_ENTIDADE_CONSUMO)),
+            geracao_total_kwh=self._read_entity_kwh(self._effective_value(CONF_ENTIDADE_GERACAO)),
+            injecao_total_kwh=self._read_entity_kwh(self._effective_value(CONF_ENTIDADE_INJECAO)),
+            reading_day=int(self._effective_value(CONF_DIA_LEITURA, DIA_LEITURA_PADRAO)),
             tariff_context=self._cached_rollover_context(),
         )
-        icms_source = self._refresh_icms_dependent_values(
-            values=self.data.values,
+        icms_source = self._refresh_icms_dependent_valores(
+            valores=self.data.valores,
             concessionaria=self.data.concessionaria,
-            consumo_mensal_kwh=float(
-                self._consumo_period_state[BREAKDOWN_MONTHLY]["kwh"]
-            ),
+            consumo_mensal_kwh=float(self._consumo_period_state[QUEBRA_MENSAL]["kwh"]),
             tipo_fornecimento=str(
-                self._effective_value(CONF_SUPPLY_TYPE, SUPPLY_MONOPHASE)
+                self._effective_value(CONF_TIPO_FORNECIMENTO, FORNECIMENTO_MONOFASICO)
             ),
             fallback_icms_percent=float(
-                self.data.diagnostics.get(
+                self.data.diagnosticos.get(
                     "icms_percent_base_fonte",
-                    self.data.values.get("icms_percent", 0.0) or 0.0,
+                    self.data.valores.get("icms_percent", 0.0) or 0.0,
                 )
                 or 0.0
             ),
-            has_consumo_history=True,
+            possui_historico_consumo=True,
             reference_date=now.date(),
         )
-        self._apply_dynamic_values_to_snapshot(
-            values=self.data.values,
-            enabled_breakdowns=self._effective_breakdowns(),
-            consumo_periodos=self._current_period_values(self._consumo_period_state),
-            geracao_periodos=self._current_period_values(self._geracao_period_state),
-            injecao_periodos=self._current_period_values(self._injecao_period_state),
-            consumo_tarifa_branca=self._current_posto_period_values(
+        self._apply_dynamic_valores_to_snapshot(
+            valores=self.data.valores,
+            quebras_habilitadas=self._effective_breakdowns(),
+            consumo_periodos=self._current_period_valores(self._consumo_period_state),
+            geracao_periodos=self._current_period_valores(self._geracao_period_state),
+            injecao_periodos=self._current_period_valores(self._injecao_period_state),
+            consumo_tarifa_branca=self._current_posto_period_valores(
                 self._consumo_tarifa_branca_state
             ),
-            has_generation=bool(self._effective_value(CONF_GENERATION_ENTITY)),
-            has_injection=bool(self._effective_value(CONF_INJECTION_ENTITY)),
+            possui_geracao=bool(self._effective_value(CONF_ENTIDADE_GERACAO)),
+            possui_injecao=bool(self._effective_value(CONF_ENTIDADE_INJECAO)),
             geracao_total_kwh=self._last_geracao_total_kwh,
             injecao_total_kwh=self._last_injecao_total_kwh,
             tipo_fornecimento=str(
-                self._effective_value(CONF_SUPPLY_TYPE, SUPPLY_MONOPHASE)
+                self._effective_value(CONF_TIPO_FORNECIMENTO, FORNECIMENTO_MONOFASICO)
             ),
         )
-        self.data.updated_at = now
-        self.data.diagnostics["icms_source"] = icms_source
-        self.data.diagnostics["icms_percent_aplicado"] = self.data.values.get(
-            "icms_percent"
-        )
-        self._update_dynamic_diagnostics(now)
+        self.data.atualizado_em = now
+        self.data.diagnosticos["icms_source"] = icms_source
+        self.data.diagnosticos["icms_percent_aplicado"] = self.data.valores.get("icms_percent")
+        self._update_dynamic_diagnosticos(now)
         self._schedule_state_save()
         self.async_update_listeners()
 
@@ -499,7 +486,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         }
         schedule, schedule_metadata = resolve_tarifa_branca_schedule(effective_config)
         extra_holidays, invalid = parse_extra_holidays(
-            effective_config.get(CONF_TB_EXTRA_HOLIDAYS)
+            effective_config.get(CONF_TB_FERIADOS_EXTRAS)
         )
         years = {datetime.now().year}
         for reference in reference_datetimes:
@@ -512,29 +499,26 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         return schedule, holidays, schedule_metadata
 
     @staticmethod
-    def _current_period_values(
+    def _current_period_valores(
         period_state: dict[str, dict[str, str | float | None]],
     ) -> dict[str, float]:
         """Extrai acumuladores correntes por quebra."""
 
-        return {
-            period: float(period_state[period]["kwh"])
-            for period in VALID_BREAKDOWNS
-        }
+        return {period: float(period_state[period]["kwh"]) for period in QUEBRAS_VALIDAS}
 
     @staticmethod
-    def _current_posto_period_values(
+    def _current_posto_period_valores(
         period_state: dict[str, dict[str, Any]],
     ) -> dict[str, dict[str, float]]:
         """Extrai acumuladores correntes por posto tarifario."""
 
-        values: dict[str, dict[str, float]] = {}
-        for period in VALID_BREAKDOWNS:
-            values[period] = {
+        valores: dict[str, dict[str, float]] = {}
+        for period in QUEBRAS_VALIDAS:
+            valores[period] = {
                 posto: float(period_state[period]["postos"][posto])
                 for posto in POSTOS_TARIFA_BRANCA
             }
-        return values
+        return valores
 
     def _prepare_delta_context(
         self,
@@ -573,8 +557,8 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
     ) -> dict[str, list[tuple[str, float]]]:
         """Garante rollover de acumuladores escalares mesmo sem delta."""
 
-        rollovers: dict[str, list[tuple[str, float]]] = {period: [] for period in VALID_BREAKDOWNS}
-        for period in VALID_BREAKDOWNS:
+        rollovers: dict[str, list[tuple[str, float]]] = {period: [] for period in QUEBRAS_VALIDAS}
+        for period in QUEBRAS_VALIDAS:
             current_key = self._period_key(period, now, reading_day)
             if period_state[period]["key"] != current_key:
                 old_key = period_state[period]["key"]
@@ -594,9 +578,9 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         """Garante rollover dos acumuladores por posto mesmo sem delta."""
 
         rollovers: dict[str, list[tuple[str, dict[str, float]]]] = {
-            period: [] for period in VALID_BREAKDOWNS
+            period: [] for period in QUEBRAS_VALIDAS
         }
-        for period in VALID_BREAKDOWNS:
+        for period in QUEBRAS_VALIDAS:
             current_key = self._period_key(period, now, reading_day)
             if period_state[period]["key"] != current_key:
                 old_key = period_state[period]["key"]
@@ -607,9 +591,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                 if old_key is not None:
                     rollovers[period].append((str(old_key), old_postos))
                 period_state[period]["key"] = current_key
-                period_state[period]["postos"] = {
-                    posto: 0.0 for posto in POSTOS_TARIFA_BRANCA
-                }
+                period_state[period]["postos"] = {posto: 0.0 for posto in POSTOS_TARIFA_BRANCA}
         return {k: v for k, v in rollovers.items() if v}
 
     def _apply_scalar_delta_context(
@@ -624,24 +606,24 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         rollovers: dict[str, list[tuple[str, float]]] = {}
         if not delta_context["has_previous"]:
             rollovers = self._ensure_scalar_current_keys(period_state, now, reading_day)
-            return self._current_period_values(period_state), rollovers
+            return self._current_period_valores(period_state), rollovers
         if delta_context.get("reset_detected"):
             rollovers = self._ensure_scalar_current_keys(period_state, now, reading_day)
-            return self._current_period_values(period_state), rollovers
+            return self._current_period_valores(period_state), rollovers
 
         start = delta_context["start"]
         end = delta_context["end"]
         delta_kwh = float(delta_context["delta_kwh"])
         if not isinstance(start, datetime) or not isinstance(end, datetime) or delta_kwh <= 0:
             rollovers = self._ensure_scalar_current_keys(period_state, now, reading_day)
-            return self._current_period_values(period_state), rollovers
+            return self._current_period_valores(period_state), rollovers
 
         total_seconds = max((end - start).total_seconds(), 1.0)
         for segment_start, segment_end in split_interval_by_midnight(start, end):
             segment_delta = delta_kwh * (
                 (segment_end - segment_start).total_seconds() / total_seconds
             )
-            for period in VALID_BREAKDOWNS:
+            for period in QUEBRAS_VALIDAS:
                 period_key = self._period_key(period, segment_start, reading_day)
                 if period_state[period]["key"] != period_key:
                     old_key = period_state[period]["key"]
@@ -654,7 +636,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         current_rollovers = self._ensure_scalar_current_keys(period_state, now, reading_day)
         for period, items in current_rollovers.items():
             rollovers.setdefault(period, []).extend(items)
-        return self._current_period_values(period_state), rollovers
+        return self._current_period_valores(period_state), rollovers
 
     def _apply_tarifa_branca_delta_context(
         self,
@@ -670,20 +652,20 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         rollovers: dict[str, list[tuple[str, dict[str, float]]]] = {}
         if not delta_context["has_previous"]:
             rollovers = self._ensure_posto_current_keys(period_state, now, reading_day)
-            return self._current_posto_period_values(period_state), rollovers
+            return self._current_posto_period_valores(period_state), rollovers
         if delta_context.get("reset_detected"):
             self._tarifa_branca_last_interval_seconds = 0.0
             self._tarifa_branca_last_segment_count = 0
             self._tarifa_branca_low_confidence = False
             rollovers = self._ensure_posto_current_keys(period_state, now, reading_day)
-            return self._current_posto_period_values(period_state), rollovers
+            return self._current_posto_period_valores(period_state), rollovers
 
         start = delta_context["start"]
         end = delta_context["end"]
         delta_kwh = float(delta_context["delta_kwh"])
         if not isinstance(start, datetime) or not isinstance(end, datetime) or delta_kwh <= 0:
             rollovers = self._ensure_posto_current_keys(period_state, now, reading_day)
-            return self._current_posto_period_values(period_state), rollovers
+            return self._current_posto_period_valores(period_state), rollovers
 
         segments = split_interval_by_tarifa_branca(start, end, schedule, holidays)
         total_seconds = max((end - start).total_seconds(), 1.0)
@@ -695,7 +677,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             segment_delta = delta_kwh * (
                 (segment_end - segment_start).total_seconds() / total_seconds
             )
-            for period in VALID_BREAKDOWNS:
+            for period in QUEBRAS_VALIDAS:
                 period_key = self._period_key(period, segment_start, reading_day)
                 if period_state[period]["key"] != period_key:
                     old_key = period_state[period]["key"]
@@ -715,16 +697,16 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         current_rollovers = self._ensure_posto_current_keys(period_state, now, reading_day)
         for period, items in current_rollovers.items():
             rollovers.setdefault(period, []).extend(items)
-        return self._current_posto_period_values(period_state), rollovers
+        return self._current_posto_period_valores(period_state), rollovers
 
-    def _refresh_icms_dependent_values(
+    def _refresh_icms_dependent_valores(
         self,
-        values: dict[str, float | str | bool | None],
+        valores: dict[str, float | str | bool | None],
         concessionaria: str,
         consumo_mensal_kwh: float,
         tipo_fornecimento: str,
         fallback_icms_percent: float,
-        has_consumo_history: bool,
+        possui_historico_consumo: bool,
         reference_date: date,
     ) -> str:
         """Recalcula ICMS usando o maior valor entre consumo e minimo faturavel."""
@@ -734,7 +716,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             consumo_mensal_kwh=consumo_mensal_kwh,
             disponibilidade_kwh=disponibilidade_kwh,
         )
-        if has_consumo_history or consumo_mensal_kwh > 0 or disponibilidade_kwh > 0:
+        if possui_historico_consumo or consumo_mensal_kwh > 0 or disponibilidade_kwh > 0:
             icms_aplicado_percent, icms_source = resolve_icms_percent(
                 concessionaria=concessionaria,
                 consumo_mensal_kwh=consumo_faturavel_kwh,
@@ -744,61 +726,49 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             icms_aplicado_percent = fallback_icms_percent
             icms_source = "fallback_bootstrap_sem_historico"
 
-        pis_percent = float(values.get("pis_percent", 0.0) or 0.0)
-        cofins_percent = float(values.get("cofins_percent", 0.0) or 0.0)
+        pis_percent = float(valores.get("pis_percent", 0.0) or 0.0)
+        cofins_percent = float(valores.get("cofins_percent", 0.0) or 0.0)
         tarifa_conv_bruta, tarifa_conv_final = calcular_tarifa_convencional(
-            te_convencional_r_kwh=float(values.get("te_convencional_r_kwh", 0.0) or 0.0),
-            tusd_convencional_r_kwh=float(
-                values.get("tusd_convencional_r_kwh", 0.0) or 0.0
-            ),
+            te_convencional_r_kwh=float(valores.get("te_convencional_r_kwh", 0.0) or 0.0),
+            tusd_convencional_r_kwh=float(valores.get("tusd_convencional_r_kwh", 0.0) or 0.0),
             pis_percent=pis_percent,
             cofins_percent=cofins_percent,
             icms_percent=icms_aplicado_percent,
         )
         tarifa_branca = calcular_tarifa_branca_por_posto(
             te_por_posto_r_kwh={
-                "fora_ponta": float(values.get("te_branca_fora_ponta_r_kwh", 0.0) or 0.0),
-                "intermediario": float(
-                    values.get("te_branca_intermediario_r_kwh", 0.0) or 0.0
-                ),
-                "ponta": float(values.get("te_branca_ponta_r_kwh", 0.0) or 0.0),
+                "fora_ponta": float(valores.get("te_branca_fora_ponta_r_kwh", 0.0) or 0.0),
+                "intermediario": float(valores.get("te_branca_intermediario_r_kwh", 0.0) or 0.0),
+                "ponta": float(valores.get("te_branca_ponta_r_kwh", 0.0) or 0.0),
             },
             tusd_por_posto_r_kwh={
-                "fora_ponta": float(
-                    values.get("tusd_branca_fora_ponta_r_kwh", 0.0) or 0.0
-                ),
-                "intermediario": float(
-                    values.get("tusd_branca_intermediario_r_kwh", 0.0) or 0.0
-                ),
-                "ponta": float(values.get("tusd_branca_ponta_r_kwh", 0.0) or 0.0),
+                "fora_ponta": float(valores.get("tusd_branca_fora_ponta_r_kwh", 0.0) or 0.0),
+                "intermediario": float(valores.get("tusd_branca_intermediario_r_kwh", 0.0) or 0.0),
+                "ponta": float(valores.get("tusd_branca_ponta_r_kwh", 0.0) or 0.0),
             },
             pis_percent=pis_percent,
             cofins_percent=cofins_percent,
             icms_percent=icms_aplicado_percent,
         )
-        values["tarifa_convencional_bruta_r_kwh"] = tarifa_conv_bruta
-        values["tarifa_convencional_final_r_kwh"] = tarifa_conv_final
-        values["tarifa_branca_fora_ponta_bruta_r_kwh"] = tarifa_branca["fora_ponta"][
+        valores["tarifa_convencional_bruta_r_kwh"] = tarifa_conv_bruta
+        valores["tarifa_convencional_final_r_kwh"] = tarifa_conv_final
+        valores["tarifa_branca_fora_ponta_bruta_r_kwh"] = tarifa_branca["fora_ponta"][
             "tarifa_bruta_r_kwh"
         ]
-        values["tarifa_branca_fora_ponta_final_r_kwh"] = tarifa_branca["fora_ponta"][
+        valores["tarifa_branca_fora_ponta_final_r_kwh"] = tarifa_branca["fora_ponta"][
             "tarifa_final_r_kwh"
         ]
-        values["tarifa_branca_intermediario_bruta_r_kwh"] = tarifa_branca[
-            "intermediario"
-        ]["tarifa_bruta_r_kwh"]
-        values["tarifa_branca_intermediario_final_r_kwh"] = tarifa_branca[
-            "intermediario"
-        ]["tarifa_final_r_kwh"]
-        values["tarifa_branca_ponta_bruta_r_kwh"] = tarifa_branca["ponta"][
+        valores["tarifa_branca_intermediario_bruta_r_kwh"] = tarifa_branca["intermediario"][
             "tarifa_bruta_r_kwh"
         ]
-        values["tarifa_branca_ponta_final_r_kwh"] = tarifa_branca["ponta"][
+        valores["tarifa_branca_intermediario_final_r_kwh"] = tarifa_branca["intermediario"][
             "tarifa_final_r_kwh"
         ]
-        values["icms_percent"] = icms_aplicado_percent
-        values.update(
-            self._icms_explanation_values(
+        valores["tarifa_branca_ponta_bruta_r_kwh"] = tarifa_branca["ponta"]["tarifa_bruta_r_kwh"]
+        valores["tarifa_branca_ponta_final_r_kwh"] = tarifa_branca["ponta"]["tarifa_final_r_kwh"]
+        valores["icms_percent"] = icms_aplicado_percent
+        valores.update(
+            self._icms_explanation_valores(
                 concessionaria=concessionaria,
                 consumo_mensal_kwh=consumo_mensal_kwh,
                 consumo_faturavel_kwh=consumo_faturavel_kwh,
@@ -808,12 +778,10 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                 icms_source=icms_source,
             )
         )
-        values.update(
-            self._fio_b_effective_values(
-                fio_b_bruto_r_kwh=float(values.get("fio_b_bruto_r_kwh", 0.0) or 0.0),
-                tusd_convencional_r_kwh=float(
-                    values.get("tusd_convencional_r_kwh", 0.0) or 0.0
-                ),
+        valores.update(
+            self._fio_b_effective_valores(
+                fio_b_bruto_r_kwh=float(valores.get("fio_b_bruto_r_kwh", 0.0) or 0.0),
+                tusd_convencional_r_kwh=float(valores.get("tusd_convencional_r_kwh", 0.0) or 0.0),
                 icms_consumo_percent=icms_aplicado_percent,
                 icms_consumo_source=icms_source,
                 reference_date=reference_date,
@@ -823,7 +791,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         )
         return icms_source
 
-    def _icms_explanation_values(
+    def _icms_explanation_valores(
         self,
         concessionaria: str,
         consumo_mensal_kwh: float,
@@ -854,7 +822,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
 
         return max(consumo_mensal_kwh, disponibilidade_kwh, 0.0)
 
-    def _fio_b_effective_values(
+    def _fio_b_effective_valores(
         self,
         fio_b_bruto_r_kwh: float,
         tusd_convencional_r_kwh: float,
@@ -899,16 +867,16 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                 "fio_b_final_r_kwh": 0.0,
                 "valor_disponibilidade": 0.0,
             }
-        tarifa_conv = float(self.data.values.get("tarifa_convencional_final_r_kwh", 0.0) or 0.0)
-        fio_b_final = float(self.data.values.get("fio_b_final_r_kwh", 0.0) or 0.0)
+        tarifa_conv = float(self.data.valores.get("tarifa_convencional_final_r_kwh", 0.0) or 0.0)
+        fio_b_final = float(self.data.valores.get("fio_b_final_r_kwh", 0.0) or 0.0)
         valor_disponibilidade = calcular_valor_disponibilidade(
             tipo_fornecimento=str(
-                self._effective_value(CONF_SUPPLY_TYPE, SUPPLY_MONOPHASE)
+                self._effective_value(CONF_TIPO_FORNECIMENTO, FORNECIMENTO_MONOFASICO)
             ),
             tarifa_convencional_final_r_kwh=tarifa_conv,
         )
         disponibilidade_kwh = disponibilidade_minima_kwh(
-            str(self._effective_value(CONF_SUPPLY_TYPE, SUPPLY_MONOPHASE))
+            str(self._effective_value(CONF_TIPO_FORNECIMENTO, FORNECIMENTO_MONOFASICO))
         )
         return {
             "tarifa_convencional_final_r_kwh": tarifa_conv,
@@ -917,7 +885,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             "disponibilidade_kwh": disponibilidade_kwh,
         }
 
-    def _finalize_monthly_rollovers(
+    def _finalize_mensal_rollovers(
         self,
         consumo_rollovers: dict[str, list[tuple[str, float]]],
         geracao_rollovers: dict[str, list[tuple[str, float]]],
@@ -926,28 +894,24 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
     ) -> None:
         """Fecha ciclos mensais anteriores e atualiza o ledger de creditos."""
 
-        consumo_monthly = dict(consumo_rollovers.get(BREAKDOWN_MONTHLY, []))
-        geracao_monthly = dict(injecao_rollovers.get(BREAKDOWN_MONTHLY, []))
-        cycle_keys = sorted(set(consumo_monthly) | set(geracao_monthly))
+        consumo_mensal = dict(consumo_rollovers.get(QUEBRA_MENSAL, []))
+        geracao_mensal = dict(injecao_rollovers.get(QUEBRA_MENSAL, []))
+        cycle_keys = sorted(set(consumo_mensal) | set(geracao_mensal))
         if not cycle_keys:
             return
 
         saldo_creditos = total_credits_kwh(self._creditos_ledger)
         for cycle_key in cycle_keys:
             scee = calcular_scee_creditos_prioritarios(
-                consumo_kwh=consumo_monthly.get(cycle_key, 0.0),
-                geracao_kwh=geracao_monthly.get(cycle_key, 0.0),
+                consumo_kwh=consumo_mensal.get(cycle_key, 0.0),
+                geracao_kwh=geracao_mensal.get(cycle_key, 0.0),
                 credito_entrada_kwh=saldo_creditos,
                 tarifa_convencional_final_r_kwh=float(
                     tariff_context.get("tarifa_convencional_final_r_kwh", 0.0)
                 ),
                 fio_b_final_r_kwh=float(tariff_context.get("fio_b_final_r_kwh", 0.0)),
-                valor_disponibilidade=float(
-                    tariff_context.get("valor_disponibilidade", 0.0)
-                ),
-                disponibilidade_kwh=float(
-                    tariff_context.get("disponibilidade_kwh", 0.0)
-                ),
+                valor_disponibilidade=float(tariff_context.get("valor_disponibilidade", 0.0)),
+                disponibilidade_kwh=float(tariff_context.get("disponibilidade_kwh", 0.0)),
             )
             if scee["credito_consumido_kwh"] > 0:
                 self._creditos_ledger, _consumido = consume_credits_oldest_first(
@@ -988,8 +952,8 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         consumo_delta = None
         consumo_rollovers: dict[str, list[tuple[str, float]]] = {}
         if consumo_total_kwh is None:
-            consumo_periodos = self._current_period_values(self._consumo_period_state)
-            consumo_tarifa_branca = self._current_posto_period_values(
+            consumo_periodos = self._current_period_valores(self._consumo_period_state)
+            consumo_tarifa_branca = self._current_posto_period_valores(
                 self._consumo_tarifa_branca_state
             )
         else:
@@ -1020,7 +984,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         geracao_delta = None
         geracao_rollovers: dict[str, list[tuple[str, float]]] = {}
         if geracao_total_kwh is None:
-            geracao_periodos = self._current_period_values(self._geracao_period_state)
+            geracao_periodos = self._current_period_valores(self._geracao_period_state)
         else:
             geracao_delta = self._prepare_delta_context(
                 geracao_total_kwh,
@@ -1038,7 +1002,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         injecao_delta = None
         injecao_rollovers: dict[str, list[tuple[str, float]]] = {}
         if injecao_total_kwh is None:
-            injecao_periodos = self._current_period_values(self._injecao_period_state)
+            injecao_periodos = self._current_period_valores(self._injecao_period_state)
         else:
             injecao_delta = self._prepare_delta_context(
                 injecao_total_kwh,
@@ -1060,12 +1024,12 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         if injecao_delta is not None and injecao_delta.get("reset_detected"):
             self._injecao_reset_detectado += 1
 
-        self._finalize_monthly_rollovers(
+        self._finalize_mensal_rollovers(
             consumo_rollovers=consumo_rollovers,
             geracao_rollovers=geracao_rollovers,
             injecao_rollovers=(
                 injecao_rollovers
-                if self._effective_value(CONF_INJECTION_ENTITY)
+                if self._effective_value(CONF_ENTIDADE_INJECAO)
                 else geracao_rollovers
             ),
             tariff_context=tariff_context,
@@ -1080,30 +1044,30 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         if injecao_total_kwh is not None:
             self._last_injecao_total_kwh = injecao_total_kwh
             self._last_injecao_timestamp = now
-        current_monthly_key = self._consumo_period_state[BREAKDOWN_MONTHLY]["key"]
-        if current_monthly_key is not None:
-            self._ultimo_ciclo_mensal = str(current_monthly_key)
+        current_mensal_key = self._consumo_period_state[QUEBRA_MENSAL]["key"]
+        if current_mensal_key is not None:
+            self._ultimo_ciclo_mensal = str(current_mensal_key)
         return consumo_periodos, geracao_periodos, injecao_periodos, consumo_tarifa_branca
 
-    def _apply_dynamic_values_to_snapshot(
+    def _apply_dynamic_valores_to_snapshot(
         self,
-        values: dict[str, float | str | bool | None],
-        enabled_breakdowns: list[str],
+        valores: dict[str, float | str | bool | None],
+        quebras_habilitadas: list[str],
         consumo_periodos: dict[str, float],
         geracao_periodos: dict[str, float],
         injecao_periodos: dict[str, float],
         consumo_tarifa_branca: dict[str, dict[str, float]],
-        has_generation: bool,
-        has_injection: bool,
+        possui_geracao: bool,
+        possui_injecao: bool,
         geracao_total_kwh: float | None,
         injecao_total_kwh: float | None,
         tipo_fornecimento: str,
     ) -> None:
         """Atualiza campos derivados do snapshot a partir dos acumuladores correntes."""
 
-        tarifa_conv_final = float(values.get("tarifa_convencional_final_r_kwh", 0.0) or 0.0)
-        adicional_bandeira = float(values.get("adicional_bandeira_r_kwh", 0.0) or 0.0)
-        fio_b_final = float(values.get("fio_b_final_r_kwh", 0.0) or 0.0)
+        tarifa_conv_final = float(valores.get("tarifa_convencional_final_r_kwh", 0.0) or 0.0)
+        adicional_bandeira = float(valores.get("adicional_bandeira_r_kwh", 0.0) or 0.0)
+        fio_b_final = float(valores.get("fio_b_final_r_kwh", 0.0) or 0.0)
         valor_disponibilidade = calcular_valor_disponibilidade(
             tipo_fornecimento=tipo_fornecimento,
             tarifa_convencional_final_r_kwh=tarifa_conv_final,
@@ -1111,42 +1075,40 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         disponibilidade_kwh = disponibilidade_minima_kwh(tipo_fornecimento)
         saldo_creditos_disponiveis = total_credits_kwh(self._creditos_ledger)
 
-        values["indicador_taxa_minima"] = (
-            consumo_periodos[BREAKDOWN_MONTHLY] < disponibilidade_kwh
-        )
-        values["kwh_adicionados_disponibilidade"] = max(
-            disponibilidade_kwh - consumo_periodos[BREAKDOWN_MONTHLY],
+        valores["indicador_taxa_minima"] = consumo_periodos[QUEBRA_MENSAL] < disponibilidade_kwh
+        valores["kwh_adicionados_disponibilidade"] = max(
+            disponibilidade_kwh - consumo_periodos[QUEBRA_MENSAL],
             0.0,
         )
-        values["saldo_creditos_mes_anterior_kwh"] = saldo_creditos_disponiveis
-        values["previsao_creditos_gerados_kwh"] = 0.0
-        values["auto_consumo_kwh"] = 0.0
-        values["auto_consumo_reais"] = 0.0
+        valores["saldo_creditos_mes_anterior_kwh"] = saldo_creditos_disponiveis
+        valores["previsao_creditos_gerados_kwh"] = 0.0
+        valores["auto_consumo_kwh"] = 0.0
+        valores["auto_consumo_reais"] = 0.0
 
         tarifa_final_por_posto = {
-            "fora_ponta": float(
-                values.get("tarifa_branca_fora_ponta_final_r_kwh", 0.0) or 0.0
-            ),
+            "fora_ponta": float(valores.get("tarifa_branca_fora_ponta_final_r_kwh", 0.0) or 0.0),
             "intermediario": float(
-                values.get("tarifa_branca_intermediario_final_r_kwh", 0.0) or 0.0
+                valores.get("tarifa_branca_intermediario_final_r_kwh", 0.0) or 0.0
             ),
-            "ponta": float(values.get("tarifa_branca_ponta_final_r_kwh", 0.0) or 0.0),
+            "ponta": float(valores.get("tarifa_branca_ponta_final_r_kwh", 0.0) or 0.0),
         }
 
-        for period in VALID_BREAKDOWNS:
+        for period in QUEBRAS_VALIDAS:
             dynamic_keys = (
                 f"valor_conta_consumo_regular_{period}_r",
                 f"valor_conta_tarifa_branca_{period}_r",
                 f"valor_conta_com_geracao_{period}_r",
                 f"valor_fio_b_compensada_{period}_r",
+                f"auto_consumo_{period}_kwh",
+                f"auto_consumo_{period}_reais",
                 f"valor_conta_consumo_regular_sem_disponibilidade_{period}_r",
                 f"valor_conta_tarifa_branca_sem_disponibilidade_{period}_r",
                 f"valor_conta_com_geracao_sem_disponibilidade_{period}_r",
             )
             for dynamic_key in dynamic_keys:
-                values.pop(dynamic_key, None)
+                valores.pop(dynamic_key, None)
 
-            if period not in enabled_breakdowns:
+            if period not in quebras_habilitadas:
                 continue
 
             consumo_kwh_periodo = consumo_periodos[period]
@@ -1155,35 +1117,35 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                 tarifa_convencional_final_r_kwh=tarifa_conv_final,
                 adicional_bandeira_r_kwh=adicional_bandeira,
             )
-            values[f"valor_conta_consumo_regular_{period}_r"] = (
+            valores[f"valor_conta_consumo_regular_{period}_r"] = (
                 max(valor_disponibilidade, valor_regular_sem_disponibilidade)
-                if period == BREAKDOWN_MONTHLY
+                if period == QUEBRA_MENSAL
                 else valor_regular_sem_disponibilidade
             )
-            if period == BREAKDOWN_MONTHLY:
-                values[
-                    f"valor_conta_consumo_regular_sem_disponibilidade_{period}_r"
-                ] = valor_regular_sem_disponibilidade
+            if period == QUEBRA_MENSAL:
+                valores[f"valor_conta_consumo_regular_sem_disponibilidade_{period}_r"] = (
+                    valor_regular_sem_disponibilidade
+                )
 
             valor_tarifa_branca_sem_disponibilidade = calcular_valor_conta_tarifa_branca(
                 consumo_por_posto_kwh=consumo_tarifa_branca[period],
                 tarifa_final_por_posto_r_kwh=tarifa_final_por_posto,
                 adicional_bandeira_r_kwh=adicional_bandeira,
             )
-            values[f"valor_conta_tarifa_branca_{period}_r"] = (
+            valores[f"valor_conta_tarifa_branca_{period}_r"] = (
                 max(valor_disponibilidade, valor_tarifa_branca_sem_disponibilidade)
-                if period == BREAKDOWN_MONTHLY
+                if period == QUEBRA_MENSAL
                 else valor_tarifa_branca_sem_disponibilidade
             )
-            if period == BREAKDOWN_MONTHLY:
-                values[
-                    f"valor_conta_tarifa_branca_sem_disponibilidade_{period}_r"
-                ] = valor_tarifa_branca_sem_disponibilidade
+            if period == QUEBRA_MENSAL:
+                valores[f"valor_conta_tarifa_branca_sem_disponibilidade_{period}_r"] = (
+                    valor_tarifa_branca_sem_disponibilidade
+                )
 
-            if has_generation or has_injection:
-                credito_entrada = saldo_creditos_disponiveis if period == BREAKDOWN_MONTHLY else 0.0
+            if possui_geracao or possui_injecao:
+                credito_entrada = saldo_creditos_disponiveis if period == QUEBRA_MENSAL else 0.0
                 injecao_kwh_periodo = (
-                    injecao_periodos[period] if has_injection else geracao_periodos[period]
+                    injecao_periodos[period] if possui_injecao else geracao_periodos[period]
                 )
                 scee = calcular_scee_creditos_prioritarios(
                     consumo_kwh=consumo_kwh_periodo,
@@ -1192,64 +1154,80 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                     tarifa_convencional_final_r_kwh=tarifa_conv_final,
                     fio_b_final_r_kwh=fio_b_final,
                     valor_disponibilidade=(
-                        valor_disponibilidade if period == BREAKDOWN_MONTHLY else 0.0
+                        valor_disponibilidade if period == QUEBRA_MENSAL else 0.0
                     ),
-                    disponibilidade_kwh=(
-                        disponibilidade_kwh if period == BREAKDOWN_MONTHLY else 0.0
-                    ),
+                    disponibilidade_kwh=(disponibilidade_kwh if period == QUEBRA_MENSAL else 0.0),
                 )
-                values[f"valor_conta_com_geracao_{period}_r"] = scee["valor_consumo_faturado"]
-                values[f"valor_fio_b_compensada_{period}_r"] = scee["valor_fio_b_compensada"]
+                valores[f"valor_conta_com_geracao_{period}_r"] = scee["valor_consumo_faturado"]
+                valores[f"valor_fio_b_compensada_{period}_r"] = scee["valor_fio_b_compensada"]
+                if possui_injecao:
+                    auto_consumo_periodo_kwh = calcular_auto_consumo_kwh(
+                        gerado_kwh=geracao_periodos[period],
+                        injetado_kwh=injecao_periodos[period],
+                    )
+                else:
+                    auto_consumo_periodo_kwh = calcular_auto_consumo_kwh(
+                        gerado_kwh=geracao_periodos[period],
+                        injetado_kwh=scee["credito_gerado_energia_kwh"],
+                    )
+                valores[f"auto_consumo_{period}_kwh"] = auto_consumo_periodo_kwh
+                valores[f"auto_consumo_{period}_reais"] = (
+                    auto_consumo_periodo_kwh * tarifa_conv_final
+                )
 
-                if period == BREAKDOWN_MONTHLY:
-                    values[
-                        f"valor_conta_com_geracao_sem_disponibilidade_{period}_r"
-                    ] = scee["valor_consumo_scee"]
+                if period == QUEBRA_MENSAL:
+                    valores[f"valor_conta_com_geracao_sem_disponibilidade_{period}_r"] = scee[
+                        "valor_consumo_scee"
+                    ]
                     self._credito_consumido_estimado_atual_kwh = scee["credito_consumido_kwh"]
                     self._credito_estimado_atual_kwh = scee["credito_gerado_kwh"]
-                    values["previsao_creditos_gerados_kwh"] = max(
+                    valores["previsao_creditos_gerados_kwh"] = max(
                         credito_entrada
                         - scee["credito_consumido_kwh"]
                         + scee["credito_gerado_kwh"],
                         0.0,
                     )
-                    if has_injection:
-                        values["auto_consumo_kwh"] = calcular_auto_consumo_kwh(
+                    if possui_injecao:
+                        valores["auto_consumo_kwh"] = calcular_auto_consumo_kwh(
                             gerado_kwh=float(geracao_total_kwh or 0.0),
                             injetado_kwh=float(injecao_total_kwh or 0.0),
                         )
                     else:
-                        values["auto_consumo_kwh"] = calcular_auto_consumo_kwh(
-                            gerado_kwh=geracao_periodos[period],
-                            injetado_kwh=scee["credito_gerado_energia_kwh"],
-                        )
-                    values["auto_consumo_reais"] = (
-                        float(values["auto_consumo_kwh"]) * tarifa_conv_final
+                        valores["auto_consumo_kwh"] = auto_consumo_periodo_kwh
+                    valores["auto_consumo_reais"] = (
+                        float(valores["auto_consumo_kwh"]) * tarifa_conv_final
                     )
-            elif period == BREAKDOWN_MONTHLY:
+            elif period == QUEBRA_MENSAL:
                 self._credito_consumido_estimado_atual_kwh = 0.0
                 self._credito_estimado_atual_kwh = 0.0
 
-    def _update_dynamic_diagnostics(self, now: datetime) -> None:
+        if possui_injecao:
+            valores["auto_consumo_kwh"] = calcular_auto_consumo_kwh(
+                gerado_kwh=float(geracao_total_kwh or 0.0),
+                injetado_kwh=float(injecao_total_kwh or 0.0),
+            )
+            valores["auto_consumo_reais"] = float(valores["auto_consumo_kwh"]) * tarifa_conv_final
+
+    def _update_dynamic_diagnosticos(self, now: datetime) -> None:
         """Atualiza diagnosticos dependentes dos acumuladores correntes."""
 
         if self.data is None:
             return
 
         schedule, holidays, schedule_metadata = self._resolve_tarifa_branca_context(now)
-        self.data.diagnostics.update(
+        self.data.diagnosticos.update(
             {
                 "consumo_reset_detectado": self._consumo_reset_detectado,
                 "geracao_reset_detectado": self._geracao_reset_detectado,
                 "injecao_reset_detectado": self._injecao_reset_detectado,
                 "consumo_mensal_kwh_apurado": float(
-                    self._consumo_period_state[BREAKDOWN_MONTHLY]["kwh"]
+                    self._consumo_period_state[QUEBRA_MENSAL]["kwh"]
                 ),
                 "geracao_mensal_kwh_apurado": float(
-                    self._geracao_period_state[BREAKDOWN_MONTHLY]["kwh"]
+                    self._geracao_period_state[QUEBRA_MENSAL]["kwh"]
                 ),
                 "injecao_mensal_kwh_apurado": float(
-                    self._injecao_period_state[BREAKDOWN_MONTHLY]["kwh"]
+                    self._injecao_period_state[QUEBRA_MENSAL]["kwh"]
                 ),
                 "estimativa_tarifa_branca_sem_posto_real": self._tarifa_branca_low_confidence,
                 "tarifa_branca_schedule_source": self._tarifa_branca_schedule_source,
@@ -1270,7 +1248,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             }
         )
 
-    async def _async_update_data(self) -> SnapshotCalculo:
+    async def _async_update_data(self) -> ResultadoCalculo:
         """Executa ciclo de coleta e retorna snapshot final dos sensores."""
 
         await self.async_ensure_state_loaded()
@@ -1279,15 +1257,15 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         referencia = now.date()
 
         concessionaria = self._effective_value(CONF_CONCESSIONARIA)
-        prioridade = self._effective_value(CONF_ANEEL_METHOD, DEFAULT_ANEEL_METHOD)
+        prioridade = self._effective_value(CONF_METODO_ANEEL, METODO_ANEEL_PADRAO)
         if not isinstance(concessionaria, str) or not concessionaria.strip():
             raise UpdateFailed("Concessionaria nao configurada.")
 
-        consumo_entity = self._effective_value(CONF_CONSUMPTION_ENTITY)
-        geracao_entity = self._effective_value(CONF_GENERATION_ENTITY)
-        injecao_entity = self._effective_value(CONF_INJECTION_ENTITY)
-        tipo_fornecimento = self._effective_value(CONF_SUPPLY_TYPE, SUPPLY_MONOPHASE)
-        had_consumo_history = self._last_consumo_timestamp is not None
+        entidade_consumo = self._effective_value(CONF_ENTIDADE_CONSUMO)
+        geracao_entity = self._effective_value(CONF_ENTIDADE_GERACAO)
+        injecao_entity = self._effective_value(CONF_ENTIDADE_INJECAO)
+        tipo_fornecimento = self._effective_value(CONF_TIPO_FORNECIMENTO, FORNECIMENTO_MONOFASICO)
+        possuia_historico_consumo = self._last_consumo_timestamp is not None
 
         try:
             tarifas_task = self._aneel_client.fetch_tarifas(
@@ -1327,9 +1305,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             RuntimeError,
             Exception,
         ) as err:
-            retry_interval = self.update_interval or timedelta(
-                hours=self._effective_update_hours()
-            )
+            retry_interval = self.update_interval or timedelta(hours=self._effective_update_hours())
             retry_at = now + retry_interval
             if self.data is not None:
                 _LOGGER.warning(
@@ -1343,16 +1319,16 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                     retry_interval,
                     err,
                 )
-                diagnostics = dict(self.data.diagnostics)
-                diagnostics["mensagem_erro"] = str(err)
-                diagnostics["ultima_falha"] = now.isoformat()
-                diagnostics["usou_ultimo_valor_valido"] = True
-                return SnapshotCalculo(
-                    updated_at=now,
+                diagnosticos = dict(self.data.diagnosticos)
+                diagnosticos["mensagem_erro"] = str(err)
+                diagnosticos["ultima_falha"] = now.isoformat()
+                diagnosticos["usou_ultimo_valor_valido"] = True
+                return ResultadoCalculo(
+                    atualizado_em=now,
                     concessionaria=self.data.concessionaria,
-                    values=self.data.values,
-                    collections_by_key=self.data.collections_by_key,
-                    diagnostics=diagnostics,
+                    valores=self.data.valores,
+                    coletas_por_chave=self.data.coletas_por_chave,
+                    diagnosticos=diagnosticos,
                 )
             _LOGGER.error(
                 (
@@ -1372,12 +1348,12 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         bandeira_data, bandeira_meta = bandeira_result
         tributos_data, tributos_meta = tributos_result
 
-        consumo_total_kwh = self._read_entity_kwh(consumo_entity)
+        consumo_total_kwh = self._read_entity_kwh(entidade_consumo)
         geracao_total_kwh = self._read_entity_kwh(geracao_entity)
         injecao_total_kwh = self._read_entity_kwh(injecao_entity)
 
-        enabled_breakdowns = self._effective_breakdowns()
-        reading_day = int(self._effective_value(CONF_READING_DAY, DEFAULT_READING_DAY))
+        quebras_habilitadas = self._effective_breakdowns()
+        reading_day = int(self._effective_value(CONF_DIA_LEITURA, DIA_LEITURA_PADRAO))
         (
             consumo_periodos,
             geracao_periodos,
@@ -1392,13 +1368,13 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             tariff_context=self._cached_rollover_context(),
         )
 
-        consumo_mensal_kwh = consumo_periodos[BREAKDOWN_MONTHLY]
+        consumo_mensal_kwh = consumo_periodos[QUEBRA_MENSAL]
         disponibilidade_kwh = disponibilidade_minima_kwh(tipo_fornecimento)
         icms_consumo_faturavel_kwh = self._icms_consumo_faturavel_kwh(
             consumo_mensal_kwh=consumo_mensal_kwh,
             disponibilidade_kwh=disponibilidade_kwh,
         )
-        if had_consumo_history or consumo_mensal_kwh > 0 or disponibilidade_kwh > 0:
+        if possuia_historico_consumo or consumo_mensal_kwh > 0 or disponibilidade_kwh > 0:
             icms_aplicado_percent, icms_source = resolve_icms_percent(
                 concessionaria=concessionaria,
                 consumo_mensal_kwh=icms_consumo_faturavel_kwh,
@@ -1433,7 +1409,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         )
 
         fio_b_bruto = fio_b_data["convencional_bruto_r_kwh"]
-        fio_b_effective_values = self._fio_b_effective_values(
+        fio_b_effective_valores = self._fio_b_effective_valores(
             fio_b_bruto_r_kwh=fio_b_bruto,
             tusd_convencional_r_kwh=tarifas_data["convencional"]["tusd_r_kwh"],
             icms_consumo_percent=icms_aplicado_percent,
@@ -1442,7 +1418,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             pis_percent=tributos_data.pis_percent,
             cofins_percent=tributos_data.cofins_percent,
         )
-        ciclo_mensal_atual = self._period_key(BREAKDOWN_MONTHLY, now, reading_day)
+        ciclo_mensal_atual = self._period_key(QUEBRA_MENSAL, now, reading_day)
         competencia_atual = competencia_from_cycle_key(ciclo_mensal_atual)
         if competencia_atual:
             self._creditos_ledger = purge_expired_credits(
@@ -1453,7 +1429,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
 
         saldo_creditos_disponiveis = total_credits_kwh(self._creditos_ledger)
 
-        values: dict[str, float | str | bool | None] = {
+        valores: dict[str, float | str | bool | None] = {
             "te_convencional_r_kwh": tarifas_data["convencional"]["te_r_kwh"],
             "tusd_convencional_r_kwh": tarifas_data["convencional"]["tusd_r_kwh"],
             "tarifa_convencional_bruta_r_kwh": tarifa_conv_bruta,
@@ -1476,18 +1452,14 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             ],
             "te_branca_ponta_r_kwh": tarifa_branca["ponta"]["te_r_kwh"],
             "tusd_branca_ponta_r_kwh": tarifa_branca["ponta"]["tusd_r_kwh"],
-            "tarifa_branca_ponta_bruta_r_kwh": tarifa_branca["ponta"][
-                "tarifa_bruta_r_kwh"
-            ],
-            "tarifa_branca_ponta_final_r_kwh": tarifa_branca["ponta"][
-                "tarifa_final_r_kwh"
-            ],
+            "tarifa_branca_ponta_bruta_r_kwh": tarifa_branca["ponta"]["tarifa_bruta_r_kwh"],
+            "tarifa_branca_ponta_final_r_kwh": tarifa_branca["ponta"]["tarifa_final_r_kwh"],
             "fio_b_bruto_r_kwh": fio_b_bruto,
-            **fio_b_effective_values,
+            **fio_b_effective_valores,
             "pis_percent": tributos_data.pis_percent,
             "cofins_percent": tributos_data.cofins_percent,
             "icms_percent": icms_aplicado_percent,
-            **self._icms_explanation_values(
+            **self._icms_explanation_valores(
                 concessionaria=concessionaria,
                 consumo_mensal_kwh=consumo_mensal_kwh,
                 consumo_faturavel_kwh=icms_consumo_faturavel_kwh,
@@ -1498,55 +1470,51 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
             ),
             "bandeira_vigente": bandeira_data["bandeira"],
             "adicional_bandeira_r_kwh": bandeira_data["adicional_r_kwh"],
-            "indicador_taxa_minima": consumo_periodos[BREAKDOWN_MONTHLY] < disponibilidade_kwh,
+            "indicador_taxa_minima": consumo_periodos[QUEBRA_MENSAL] < disponibilidade_kwh,
             "kwh_adicionados_disponibilidade": max(
-                disponibilidade_kwh - consumo_periodos[BREAKDOWN_MONTHLY], 0.0
+                disponibilidade_kwh - consumo_periodos[QUEBRA_MENSAL], 0.0
             ),
             "saldo_creditos_mes_anterior_kwh": saldo_creditos_disponiveis,
             "previsao_creditos_gerados_kwh": 0.0,
             "auto_consumo_kwh": 0.0,
             "auto_consumo_reais": 0.0,
         }
-        self._apply_dynamic_values_to_snapshot(
-            values=values,
-            enabled_breakdowns=enabled_breakdowns,
+        self._apply_dynamic_valores_to_snapshot(
+            valores=valores,
+            quebras_habilitadas=quebras_habilitadas,
             consumo_periodos=consumo_periodos,
             geracao_periodos=geracao_periodos,
             injecao_periodos=injecao_periodos,
             consumo_tarifa_branca=consumo_tarifa_branca,
-            has_generation=bool(geracao_entity),
-            has_injection=bool(injecao_entity),
+            possui_geracao=bool(geracao_entity),
+            possui_injecao=bool(injecao_entity),
             geracao_total_kwh=(
-                geracao_total_kwh
-                if geracao_total_kwh is not None
-                else self._last_geracao_total_kwh
+                geracao_total_kwh if geracao_total_kwh is not None else self._last_geracao_total_kwh
             ),
             injecao_total_kwh=(
-                injecao_total_kwh
-                if injecao_total_kwh is not None
-                else self._last_injecao_total_kwh
+                injecao_total_kwh if injecao_total_kwh is not None else self._last_injecao_total_kwh
             ),
             tipo_fornecimento=tipo_fornecimento,
         )
 
-        collections_by_key = self._build_collections_by_key(
-            values=values,
+        coletas_por_chave = self._build_coletas_por_chave(
+            valores=valores,
             tarifas_meta=tarifas_meta,
             fio_b_meta=fio_b_meta,
             bandeira_meta=bandeira_meta,
             tributos_meta=tributos_meta,
         )
 
-        diagnostics = {
+        diagnosticos = {
             "concessionaria": concessionaria,
             "referencia": referencia.isoformat(),
-            "enabled_breakdowns": enabled_breakdowns,
+            "quebras_habilitadas": quebras_habilitadas,
             "prioridade_aneel": prioridade,
-            "consumo_entity": consumo_entity,
+            "entidade_consumo": entidade_consumo,
             "geracao_entity": geracao_entity,
             "injecao_entity": injecao_entity,
             "consumo_mensal_kwh_apurado": consumo_mensal_kwh,
-            "consumo_bootstrap_sem_historico": not had_consumo_history,
+            "consumo_bootstrap_sem_historico": not possuia_historico_consumo,
             "mensagem_erro": None,
             "estimativa_tarifa_branca_sem_posto_real": self._tarifa_branca_low_confidence,
             "competencia_bandeira": bandeira_data["competencia"],
@@ -1564,34 +1532,34 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
 
         self._schedule_state_save()
 
-        snapshot = SnapshotCalculo(
-            updated_at=now,
+        snapshot = ResultadoCalculo(
+            atualizado_em=now,
             concessionaria=concessionaria,
-            values=values,
-            collections_by_key=collections_by_key,
-            diagnostics=diagnostics,
+            valores=valores,
+            coletas_por_chave=coletas_por_chave,
+            diagnosticos=diagnosticos,
         )
         self.data = snapshot
-        self._update_dynamic_diagnostics(now)
+        self._update_dynamic_diagnosticos(now)
         return snapshot
 
     def _effective_update_hours(self) -> int:
         """Retorna frequencia efetiva da coleta em horas."""
 
-        value = self._effective_value(CONF_UPDATE_HOURS, DEFAULT_UPDATE_HOURS)
+        value = self._effective_value(CONF_HORAS_ATUALIZACAO, HORAS_ATUALIZACAO_PADRAO)
         try:
             return max(int(value), 1)
         except (TypeError, ValueError):
-            return DEFAULT_UPDATE_HOURS
+            return HORAS_ATUALIZACAO_PADRAO
 
     def _effective_breakdowns(self) -> list[str]:
         """Retorna lista valida de quebras de calculo."""
 
-        raw = self._effective_value(CONF_BREAKDOWNS, DEFAULT_BREAKDOWNS)
+        raw = self._effective_value(CONF_QUEBRAS_CALCULO, QUEBRAS_PADRAO)
         if not isinstance(raw, list):
-            return DEFAULT_BREAKDOWNS
-        parsed = [period for period in raw if period in VALID_BREAKDOWNS]
-        return parsed or DEFAULT_BREAKDOWNS
+            return QUEBRAS_PADRAO
+        parsed = [period for period in raw if period in QUEBRAS_VALIDAS]
+        return parsed or QUEBRAS_PADRAO
 
     def _effective_value(self, key: str, default: Any = None) -> Any:
         """Le valor preferindo options e depois data."""
@@ -1637,23 +1605,23 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
                 delta = current_total_kwh
         setattr(self, last_total_attr, current_total_kwh)
 
-        values: dict[str, float] = {}
-        for period in VALID_BREAKDOWNS:
+        valores: dict[str, float] = {}
+        for period in QUEBRAS_VALIDAS:
             current_key = self._period_key(period, now, reading_day)
             if period_state[period]["key"] != current_key:
                 period_state[period]["key"] = current_key
                 period_state[period]["kwh"] = 0.0
             period_state[period]["kwh"] = float(period_state[period]["kwh"]) + max(delta, 0.0)
-            values[period] = float(period_state[period]["kwh"])
-        return values
+            valores[period] = float(period_state[period]["kwh"])
+        return valores
 
     @staticmethod
     def _period_key(period: str, now: datetime, reading_day: int) -> str:
         """Gera chave de ciclo para cada quebra."""
 
-        if period == BREAKDOWN_DAILY:
+        if period == QUEBRA_DIARIA:
             return now.strftime("%Y-%m-%d")
-        if period == BREAKDOWN_WEEKLY:
+        if period == QUEBRA_SEMANAL:
             iso = now.isocalendar()
             return f"{iso.year}-W{iso.week:02d}"
 
@@ -1668,17 +1636,17 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[SnapshotCalculo]):
         return f"{year:04d}-{month:02d}-D{effective_day:02d}"
 
     @staticmethod
-    def _build_collections_by_key(
-        values: dict[str, float | str | bool | None],
-        tarifas_meta: CollectionMetadata,
-        fio_b_meta: CollectionMetadata,
-        bandeira_meta: CollectionMetadata,
-        tributos_meta: CollectionMetadata,
-    ) -> dict[str, CollectionMetadata]:
+    def _build_coletas_por_chave(
+        valores: dict[str, float | str | bool | None],
+        tarifas_meta: MetadadosColeta,
+        fio_b_meta: MetadadosColeta,
+        bandeira_meta: MetadadosColeta,
+        tributos_meta: MetadadosColeta,
+    ) -> dict[str, MetadadosColeta]:
         """Relaciona cada sensor ao metadado mais apropriado."""
 
-        mapping: dict[str, CollectionMetadata] = {}
-        for key in values:
+        mapping: dict[str, MetadadosColeta] = {}
+        for key in valores:
             if key.startswith(("te_", "tusd_", "tarifa_")):
                 mapping[key] = tarifas_meta
             elif key.startswith("fio_b_"):

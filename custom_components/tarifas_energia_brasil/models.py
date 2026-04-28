@@ -12,7 +12,7 @@ from typing import Any
 
 
 @dataclass(slots=True)
-class CollectionMetadata:
+class MetadadosColeta:
     """Metadados de coleta para diagnostico e atributos de entidade."""
 
     ultima_coleta: str | None = None
@@ -27,14 +27,14 @@ class CollectionMetadata:
     vigencia_inicio: str | None = None
     vigencia_fim: str | None = None
 
-    def as_attributes(self) -> dict[str, Any]:
+    def como_atributos(self) -> dict[str, Any]:
         """Converte os metadados para atributos sem valores nulos."""
 
         return {k: v for k, v in asdict(self).items() if v is not None}
 
 
 @dataclass(slots=True)
-class TributosData:
+class DadosTributos:
     """Representa aliquotas de tributos da concessionaria."""
 
     concessionaria: str
@@ -49,7 +49,7 @@ class TributosData:
 
 
 @dataclass(slots=True)
-class TarifaPostoData:
+class DadosTarifaPosto:
     """Valores de TE/TUSD e tarifas por posto/modalidade."""
 
     te_r_kwh: float = 0.0
@@ -59,17 +59,17 @@ class TarifaPostoData:
 
 
 @dataclass(slots=True)
-class TarifaData:
+class DadosTarifa:
     """Conjunto de tarifas da modalidade convencional e branca."""
 
-    convencional: TarifaPostoData
-    branca_fora_ponta: TarifaPostoData
-    branca_intermediario: TarifaPostoData
-    branca_ponta: TarifaPostoData
+    convencional: DadosTarifaPosto
+    branca_fora_ponta: DadosTarifaPosto
+    branca_intermediario: DadosTarifaPosto
+    branca_ponta: DadosTarifaPosto
 
 
 @dataclass(slots=True)
-class BandeiraData:
+class DadosBandeira:
     """Representa a bandeira tarifaria vigente e seu adicional."""
 
     bandeira: str
@@ -78,7 +78,7 @@ class BandeiraData:
 
 
 @dataclass(slots=True)
-class FioBData:
+class DadosFioB:
     """Representa o valor bruto e final do componente Fio B."""
 
     bruto_r_kwh: float
@@ -88,11 +88,11 @@ class FioBData:
 
 
 @dataclass(slots=True)
-class SnapshotCalculo:
+class ResultadoCalculo:
     """Valores finais publicados nos sensores da integracao."""
 
-    updated_at: datetime
+    atualizado_em: datetime
     concessionaria: str
-    values: dict[str, float | str | bool | None]
-    collections_by_key: dict[str, CollectionMetadata]
-    diagnostics: dict[str, Any]
+    valores: dict[str, float | str | bool | None]
+    coletas_por_chave: dict[str, MetadadosColeta]
+    diagnosticos: dict[str, Any]

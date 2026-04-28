@@ -17,7 +17,7 @@ Checklist objetivo para validar a integracao no ambiente real.
 
 ## 3. Device e entidades
 
-1. Verificar criacao do device `Tarifas Energia Brasil - <Concessionaria>`.
+1. Verificar criacao do dispositivo `Tarifas Energia Brasil - <Concessionaria>`.
 2. Validar entidades base:
    - TE/TUSD convencional
    - tarifa convencional bruta/final
@@ -25,7 +25,7 @@ Checklist objetivo para validar a integracao no ambiente real.
    - PIS/COFINS/ICMS
    - bandeira e adicional
    - Fio B bruto/final
-3. Validar entidades por quebra ativa (daily/weekly/monthly).
+3. Validar entidades por quebra ativa (diario/semanal/mensal).
 
 ## 4. Atributos de coleta
 
@@ -35,11 +35,11 @@ Em sensores de origem externa, validar atributos:
 - `dataset`
 - `resource_id`
 - `metodo_acesso`
-- `usou_fallback`
+- `usou_alternativo`
 - `tentativas`
 - `mensagem_erro`
 
-## 5. Fallback e ultimo valor valido
+## 5. Alternativo e ultimo valor valido
 
 1. Simular indisponibilidade da fonte (ex.: bloqueio de internet local).
 2. Forcar atualizacao.

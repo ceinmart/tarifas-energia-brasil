@@ -13,10 +13,10 @@ Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de
 - [Fontes oficiais](#fontes-oficiais)
 - [REGRAS SCEE](#regras-scee)
 - [Endpoints/datasets consultados](#endpointsdatasets-consultados)
-- [Frequencia de chamadas e fallback](#frequencia-de-chamadas-e-fallback)
+- [Frequencia de chamadas e alternativo](#frequencia-de-chamadas-e-alternativo)
 - [Persistencia de creditos SCEE (60 meses)](#persistencia-de-creditos-scee-60-meses)
 - [Como ver a ultima atualizacao](#como-ver-a-ultima-atualizacao)
-- [Device e entidades](#device-e-entidades)
+- [Device e entidades](#dispositivo-e-entidades)
 - [Calculos detalhados](#calculos-detalhados)
 - [Fixtures e testes de extratores](#fixtures-e-testes-de-extratores)
 - [Links de versao](#links-de-versao)
@@ -43,8 +43,8 @@ Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de
 Campos da configuracao inicial:
 
 - `Concessionaria` (somente suportadas).
-- `Dia de leitura/reset mensal` (default `1`).
-- `Frequencia de atualizacao` em horas (default `24`).
+- `Dia de leitura/reset mensal` (padrao `1`).
+- `Frequencia de atualizacao` em horas (padrao `24`).
 - `Meio prioritario de acesso ANEEL`:
   - `datastore_search`
   - `datastore_search_sql`
@@ -57,23 +57,23 @@ Campos da configuracao inicial:
   - `bifasico`
   - `trifasico`
 - `Quebras de calculo`:
-  - `daily`
-  - `weekly`
-  - `monthly`
+  - `diario`
+  - `semanal`
+  - `mensal`
 
 Pos-configuracao (options flow):
 
 - Ajuste de concessionaria, frequencia, metodo ANEEL, entidades e quebras.
-- Controle de grupos de entidades no mesmo device principal:
+- Controle de grupos de entidades no mesmo dispositivo principal:
   - `Grupo de geracao/SCEE`: aparece quando existe entidade de geracao ou injecao configurada.
-  - `Grupo de tarifa branca`: toggle explicito para publicar ou ocultar esse conjunto de sensores.
+  - `Grupo de tarifa branca`: controle explicito para publicar ou ocultar esse conjunto de sensores.
 - Ajuste manual dos horarios da Tarifa Branca:
   - `inicio/fim ponta`
   - `inicio/fim intermediario 1`
   - `inicio/fim intermediario 2`
   - `feriados extras` em `YYYY-MM-DD`
 
-Defaults de grupos:
+Padraos de grupos:
 
 - Novas instalacoes: `Tarifa Branca` inicia desabilitada para reduzir ruido visual.
 - Entries antigas: o grupo `Tarifa Branca` permanece visivel por compatibilidade ate o usuario optar por ocultar.
@@ -94,8 +94,8 @@ Mapeadas mas ainda nao suportadas no fluxo:
 
 Extratores internos parciais implementados (nao habilitados no fluxo):
 
-- `RGE SUL`: parser de HTML para PIS/COFINS/ICMS com pendencia de validacao mensal completa.
-- `CEMIG-D`: parser de HTML para PIS/COFINS; ICMS permanece em fallback pendente de validacao oficial.
+- `RGE SUL`: analisador de HTML para PIS/COFINS/ICMS com pendencia de validacao mensal completa.
+- `CEMIG-D`: analisador de HTML para PIS/COFINS; ICMS permanece em alternativo pendente de validacao oficial.
 
 ## Fontes oficiais
 
@@ -169,16 +169,16 @@ Exemplos basicos:
   - `e8717aa8-2521-453f-bf16-fbb9a16eea39`, `a4060165-3a0c-404f-926c-83901088b67c`, `70ac08d1-53fc-4ceb-9c22-3a3a2c70e9fa` (Fio B multi-ano)
   - `0591b8f6-fe54-437b-b72b-1aa2efd46e42` (acionamento de bandeiras)
   - `5879ca80-b3bd-45b1-a135-d9b77c1d5b36` (adicional de bandeiras)
-- Fallbacks:
+- Alternativos:
   - `datastore_search_sql`
   - `csv_xml` (resource_show + download CSV/XML)
 
-## Frequencia de chamadas e fallback
+## Frequencia de chamadas e alternativo
 
-- A frequencia e controlada em horas pelo usuario (`default: 24`).
+- A frequencia e controlada em horas pelo usuario (`padrao: 24`).
 - Fluxo de tentativa:
   1. Metodo prioritario escolhido pelo usuario.
-  2. Metodos restantes em fallback automatico.
+  2. Metodos restantes em alternativo automatico.
   3. Em falha geral, manter ultimo valor valido.
 - Nenhuma falha externa deve zerar sensor que ja tinha valor valido.
 
@@ -188,13 +188,13 @@ Exemplos basicos:
 - Regra implementada:
   - creditos expiram em janela de `60 meses`;
   - consumo usa primeiro os creditos mais antigos;
-  - creditos gerados no ciclo atual entram no ledger no fechamento do ciclo mensal.
+  - creditos gerados no ciclo atual entram no registro no fechamento do ciclo mensal.
 - O estado persistido inclui:
   - acumuladores de consumo/geracao/injecao por periodo;
   - ciclo mensal atual;
   - credito consumido estimado no ciclo;
   - credito gerado estimado no ciclo;
-  - ledger de creditos por competencia.
+  - registro de creditos por competencia.
 
 ## Como ver a ultima atualizacao
 
@@ -205,7 +205,7 @@ Cada entidade publica atributos de coleta, quando aplicavel:
 - `dataset`
 - `resource_id`
 - `metodo_acesso`
-- `usou_fallback`
+- `usou_alternativo`
 - `tentativas`
 - `mensagem_erro`
 - `confianca_fonte`
@@ -224,20 +224,20 @@ Quando entidades sao criadas:
 - Grupo `Regular` (sempre criado): tarifa convencional, tributos, bandeira e valores de conta regular.
 - Grupo `Geracao/SCEE` (opcional): Fio B, creditos, auto-consumo e valores de conta com geracao.
 - Grupo `Tarifa Branca` (opcional): tarifas por posto e valores de conta de tarifa branca.
-- Dependentes de quebras: sensores de valor diario/semanal/mensal conforme `daily`, `weekly`, `monthly`.
+- Dependentes de quebras: sensores de valor diario/semanal/mensal conforme `diario`, `semanal`, `mensal`.
 
 Tabela completa de entidades (potenciais):
 
 Observacoes:
 
 - O Home Assistant define o `entity_id` final automaticamente. A coluna `ID sugerido` e apenas referencia.
-- A coluna `Chave interna` e o `value_key` publicado pelo coordinator.
-- Entidades por periodo usam as quebras configuradas em `Quebras de calculo` (`daily`, `weekly`, `monthly`).
-- Default de quebras quando nao informado: `daily` e `monthly`.
+- A coluna `Chave interna` e o `chave_valor` publicado pelo coordinator.
+- Entidades por periodo usam as quebras configuradas em `Quebras de calculo` (`diario`, `semanal`, `mensal`).
+- Padrao de quebras quando nao informado: `diario` e `mensal`.
 - Atualmente nao ha sensores com `state_class` `total` ou `total_increasing` nesta integracao.
-- Alguns sensores tecnicos ficam na categoria `diagnostic` para reduzir poluicao visual no device.
+- Alguns sensores tecnicos ficam na categoria `diagnostic` para reduzir poluicao visual no dispositivo.
 
-| Nome amigavel | Chave interna (`value_key`) | ID sugerido | Unidade | Tipo HA (`state_class`) | Condicao de criacao | Calculo, origem ou regra resumida |
+| Nome amigavel | Chave interna (`chave_valor`) | ID sugerido | Unidade | Tipo HA (`state_class`) | Condicao de criacao | Calculo, origem ou regra resumida |
 |---|---|---|---|---|---|---|
 | TE convencional | `te_convencional_r_kwh` | `sensor.te_convencional` | R$/kWh | `measurement` | Sempre | `VlrTUSD_TE` da ANEEL para modalidade convencional, convertido para R$/kWh quando a origem vier em R$/MWh. |
 | TUSD convencional | `tusd_convencional_r_kwh` | `sensor.tusd_convencional` | R$/kWh | `measurement` | Sempre | `VlrTUSD` da ANEEL para modalidade convencional, convertido para R$/kWh quando necessario. |
@@ -257,32 +257,38 @@ Observacoes:
 | Tarifa branca ponta final | `tarifa_branca_ponta_final_r_kwh` | `sensor.tarifa_branca_ponta_final` | R$/kWh | `measurement` | Quando o grupo `Tarifa Branca` estiver habilitado | `tarifa_branca_ponta_bruta / (1 - PIS - COFINS - ICMS)`. |
 | Fio B bruto | `fio_b_bruto_r_kwh` | `sensor.fio_b_bruto` | R$/kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `TUSD_FioB_r_mwh / 1000`. |
 | Fio B final | `fio_b_final_r_kwh` | `sensor.fio_b_final` | R$/kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Custo efetivo da compensacao: `TUSD_consumo_final - TUSD_credito_final`; atributos mostram a expressao completa. |
-| PIS | `pis_percent` | `sensor.pis` | % | `measurement` | Sempre | Aliquota mensal coletada da concessionaria; fallback local quando a coleta falha. |
-| COFINS | `cofins_percent` | `sensor.cofins` | % | `measurement` | Sempre | Aliquota mensal coletada da concessionaria; fallback local quando a coleta falha. |
-| ICMS | `icms_percent` | `sensor.icms` | % | `measurement` | Sempre | Aliquota por faixa: usa `max(consumo_mensal_kwh, disponibilidade_minima_kwh)` quando ha regra da concessionaria; caso contrario usa fallback. |
+| PIS | `pis_percent` | `sensor.pis` | % | `measurement` | Sempre | Aliquota mensal coletada da concessionaria; alternativo local quando a coleta falha. |
+| COFINS | `cofins_percent` | `sensor.cofins` | % | `measurement` | Sempre | Aliquota mensal coletada da concessionaria; alternativo local quando a coleta falha. |
+| ICMS | `icms_percent` | `sensor.icms` | % | `measurement` | Sempre | Aliquota por faixa: usa `max(consumo_mensal_kwh, disponibilidade_minima_kwh)` quando ha regra da concessionaria; caso contrario usa alternativo. |
 | Bandeira vigente | `bandeira_vigente` | `sensor.bandeira_vigente` | texto | sem `state_class` | Sempre | Nome/cor da bandeira ativa na competencia retornada pela ANEEL. |
 | Adicional da bandeira | `adicional_bandeira_r_kwh` | `sensor.adicional_bandeira` | R$/kWh | `measurement` | Sempre | `adicional_bandeira_r_mwh / 1000`; aplicado sobre kWh faturado nos valores de conta. |
 | Indicador taxa minima | `indicador_taxa_minima` | `sensor.indicador_taxa_minima` | texto (`sim`/`nao`) | sem `state_class` | Sempre | `sim` quando `consumo_mensal_kwh < disponibilidade_minima_kwh` (`30`, `50` ou `100`). |
 | kWh adicionados para disponibilidade | `kwh_adicionados_disponibilidade` | `sensor.kwh_adicionados_para_disponibilidade` | kWh | `measurement` | Sempre | Para indicador geral: `max(disponibilidade_minima_kwh - consumo_mensal_kwh, 0)`. No SCEE, o credito usa a sobra apos compensacao. |
-| Saldo de creditos do mes anterior | `saldo_creditos_mes_anterior_kwh` | `sensor.saldo_creditos_do_mes_anterior` | kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Soma do ledger persistido de creditos em kWh, consumindo primeiro os creditos mais antigos e expirando em 60 meses. |
+| Saldo de creditos do mes anterior | `saldo_creditos_mes_anterior_kwh` | `sensor.saldo_creditos_do_mes_anterior` | kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Soma do registro persistido de creditos em kWh, consumindo primeiro os creditos mais antigos e expirando em 60 meses. |
 | Previsao de creditos gerados | `previsao_creditos_gerados_kwh` | `sensor.previsao_de_creditos_gerados` | kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `max(saldo_anterior - credito_consumido + credito_energia + credito_disponibilidade, 0)`, onde `credito_disponibilidade = max(minimo_kwh - energia_nao_compensada, 0)`. |
-| Auto-consumo | `auto_consumo_kwh` | `sensor.auto_consumo` | kWh | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Com injecao configurada: `max(geracao_total - injecao_total, 0)`; sem injecao, usa estimativa por geracao e credito de energia. |
-| Auto-consumo em reais | `auto_consumo_reais` | `sensor.auto_consumo_em_reais` | R$ | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | `auto_consumo_kwh * tarifa_convencional_final_r_kwh`. |
-| Valor conta consumo regular diario | `valor_conta_consumo_regular_daily_r` | `sensor.valor_conta_consumo_regular_diario` | R$ | `measurement` | Quando `daily` estiver habilitado | `consumo_diario_kwh * (tarifa_convencional_final + adicional_bandeira)`. |
-| Valor conta consumo regular semanal | `valor_conta_consumo_regular_weekly_r` | `sensor.valor_conta_consumo_regular_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado | `consumo_semanal_kwh * (tarifa_convencional_final + adicional_bandeira)`. |
-| Valor conta consumo regular mensal | `valor_conta_consumo_regular_monthly_r` | `sensor.valor_conta_consumo_regular_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado | `max(valor_disponibilidade, consumo_mensal_kwh * (tarifa_convencional_final + adicional_bandeira))`. |
-| Valor consumo regular mensal sem disponibilidade | `valor_conta_consumo_regular_sem_disponibilidade_monthly_r` | `sensor.valor_consumo_regular_mensal_sem_disponibilidade` | R$ | `measurement` | Quando `monthly` estiver habilitado | Valor regular puro: `consumo_mensal_kwh * (tarifa_convencional_final + adicional_bandeira)`, sem aplicar minimo. |
-| Valor conta tarifa branca diario | `valor_conta_tarifa_branca_daily_r` | `sensor.valor_conta_tarifa_branca_diario` | R$ | `measurement` | Quando `daily` estiver habilitado e o grupo `Tarifa Branca` estiver habilitado | Soma por posto: `fora_ponta*tarifa_fp + intermediario*tarifa_int + ponta*tarifa_ponta + consumo_total*adicional_bandeira`. |
-| Valor conta tarifa branca semanal | `valor_conta_tarifa_branca_weekly_r` | `sensor.valor_conta_tarifa_branca_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado e o grupo `Tarifa Branca` estiver habilitado | Mesma formula por posto, usando acumuladores semanais rateados por horario/posto. |
-| Valor conta tarifa branca mensal | `valor_conta_tarifa_branca_monthly_r` | `sensor.valor_conta_tarifa_branca_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado e o grupo `Tarifa Branca` estiver habilitado | `max(valor_disponibilidade, valor_tarifa_branca_mensal_por_posto)`. |
-| Valor tarifa branca mensal sem disponibilidade | `valor_conta_tarifa_branca_sem_disponibilidade_monthly_r` | `sensor.valor_tarifa_branca_mensal_sem_disponibilidade` | R$ | `measurement` | Quando `monthly` e `Tarifa Branca` estiverem habilitados | Valor mensal por posto sem aplicar `max(valor_disponibilidade, ...)`. |
-| Valor conta com geracao diario | `valor_conta_com_geracao_daily_r` | `sensor.valor_conta_com_geracao_diario` | R$ | `measurement` | Quando `daily` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | SCEE diario sem disponibilidade: `energia_nao_compensada*tarifa_final + energia_compensada*fio_b_final`. |
-| Valor conta com geracao semanal | `valor_conta_com_geracao_weekly_r` | `sensor.valor_conta_com_geracao_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Mesma formula SCEE usando acumuladores semanais. |
-| Valor conta com geracao mensal | `valor_conta_com_geracao_monthly_r` | `sensor.valor_conta_com_geracao_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `max(valor_disponibilidade, energia_nao_compensada*tarifa_final + energia_compensada*fio_b_final)`. |
-| Valor conta com geracao mensal sem disponibilidade | `valor_conta_com_geracao_sem_disponibilidade_monthly_r` | `sensor.valor_conta_com_geracao_mensal_sem_disponibilidade` | R$ | `measurement` | Quando `monthly` e `Geracao/SCEE` estiverem habilitados | Valor SCEE puro: `energia_nao_compensada*tarifa_final + energia_compensada*fio_b_final`, sem minimo. |
-| Valor Fio B compensada diario | `valor_fio_b_compensada_daily_r` | `sensor.valor_fio_b_compensada_diario` | R$ | `measurement` | Quando `daily` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `energia_compensada_diaria_kwh * fio_b_final_r_kwh`. |
-| Valor Fio B compensada semanal | `valor_fio_b_compensada_weekly_r` | `sensor.valor_fio_b_compensada_semanal` | R$ | `measurement` | Quando `weekly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `energia_compensada_semanal_kwh * fio_b_final_r_kwh`. |
-| Valor Fio B compensada mensal | `valor_fio_b_compensada_monthly_r` | `sensor.valor_fio_b_compensada_mensal` | R$ | `measurement` | Quando `monthly` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `energia_compensada_mensal_kwh * fio_b_final_r_kwh`. |
+| Auto-consumo acumulado | `auto_consumo_kwh` | `sensor.auto_consumo_acumulado` | kWh | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Com injecao configurada: `max(geracao_total - injecao_total, 0)`; sem injecao, usa estimativa mensal por geracao e credito de energia. |
+| Auto-consumo acumulado em reais | `auto_consumo_reais` | `sensor.auto_consumo_acumulado_em_reais` | R$ | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | `auto_consumo_kwh * tarifa_convencional_final_r_kwh`. |
+| Auto-consumo diario | `auto_consumo_diario_kwh` | `sensor.auto_consumo_diario` | kWh | `measurement` | Quando `diario` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Com injecao configurada: `max(geracao_diaria - injecao_diaria, 0)`; sem injecao, usa estimativa diaria por geracao e credito de energia. |
+| Auto-consumo semanal | `auto_consumo_semanal_kwh` | `sensor.auto_consumo_semanal` | kWh | `measurement` | Quando `semanal` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Com injecao configurada: `max(geracao_semanal - injecao_semanal, 0)`; sem injecao, usa estimativa semanal por geracao e credito de energia. |
+| Auto-consumo mensal | `auto_consumo_mensal_kwh` | `sensor.auto_consumo_mensal` | kWh | `measurement` | Quando `mensal` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Com injecao configurada: `max(geracao_mensal - injecao_mensal, 0)`; sem injecao, usa estimativa mensal por geracao e credito de energia. |
+| Auto-consumo em reais diario | `auto_consumo_diario_reais` | `sensor.auto_consumo_em_reais_diario` | R$ | `measurement` | Quando `diario` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `auto_consumo_diario_kwh * tarifa_convencional_final_r_kwh`. |
+| Auto-consumo em reais semanal | `auto_consumo_semanal_reais` | `sensor.auto_consumo_em_reais_semanal` | R$ | `measurement` | Quando `semanal` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `auto_consumo_semanal_kwh * tarifa_convencional_final_r_kwh`. |
+| Auto-consumo em reais mensal | `auto_consumo_mensal_reais` | `sensor.auto_consumo_em_reais_mensal` | R$ | `measurement` | Quando `mensal` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `auto_consumo_mensal_kwh * tarifa_convencional_final_r_kwh`. |
+| Valor conta consumo regular diario | `valor_conta_consumo_regular_diario_r` | `sensor.valor_conta_consumo_regular_diario` | R$ | `measurement` | Quando `diario` estiver habilitado | `consumo_diario_kwh * (tarifa_convencional_final + adicional_bandeira)`. |
+| Valor conta consumo regular semanal | `valor_conta_consumo_regular_semanal_r` | `sensor.valor_conta_consumo_regular_semanal` | R$ | `measurement` | Quando `semanal` estiver habilitado | `consumo_semanal_kwh * (tarifa_convencional_final + adicional_bandeira)`. |
+| Valor conta consumo regular mensal | `valor_conta_consumo_regular_mensal_r` | `sensor.valor_conta_consumo_regular_mensal` | R$ | `measurement` | Quando `mensal` estiver habilitado | `max(valor_disponibilidade, consumo_mensal_kwh * (tarifa_convencional_final + adicional_bandeira))`. |
+| Valor consumo regular mensal sem disponibilidade | `valor_conta_consumo_regular_sem_disponibilidade_mensal_r` | `sensor.valor_consumo_regular_mensal_sem_disponibilidade` | R$ | `measurement` | Quando `mensal` estiver habilitado | Valor regular puro: `consumo_mensal_kwh * (tarifa_convencional_final + adicional_bandeira)`, sem aplicar minimo. |
+| Valor conta tarifa branca diario | `valor_conta_tarifa_branca_diario_r` | `sensor.valor_conta_tarifa_branca_diario` | R$ | `measurement` | Quando `diario` estiver habilitado e o grupo `Tarifa Branca` estiver habilitado | Soma por posto: `fora_ponta*tarifa_fp + intermediario*tarifa_int + ponta*tarifa_ponta + consumo_total*adicional_bandeira`. |
+| Valor conta tarifa branca semanal | `valor_conta_tarifa_branca_semanal_r` | `sensor.valor_conta_tarifa_branca_semanal` | R$ | `measurement` | Quando `semanal` estiver habilitado e o grupo `Tarifa Branca` estiver habilitado | Mesma formula por posto, usando acumuladores semanais rateados por horario/posto. |
+| Valor conta tarifa branca mensal | `valor_conta_tarifa_branca_mensal_r` | `sensor.valor_conta_tarifa_branca_mensal` | R$ | `measurement` | Quando `mensal` estiver habilitado e o grupo `Tarifa Branca` estiver habilitado | `max(valor_disponibilidade, valor_tarifa_branca_mensal_por_posto)`. |
+| Valor tarifa branca mensal sem disponibilidade | `valor_conta_tarifa_branca_sem_disponibilidade_mensal_r` | `sensor.valor_tarifa_branca_mensal_sem_disponibilidade` | R$ | `measurement` | Quando `mensal` e `Tarifa Branca` estiverem habilitados | Valor mensal por posto sem aplicar `max(valor_disponibilidade, ...)`. |
+| Valor conta com geracao diario | `valor_conta_com_geracao_diario_r` | `sensor.valor_conta_com_geracao_diario` | R$ | `measurement` | Quando `diario` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | SCEE diario sem disponibilidade: `energia_nao_compensada*tarifa_final + energia_compensada*fio_b_final`. |
+| Valor conta com geracao semanal | `valor_conta_com_geracao_semanal_r` | `sensor.valor_conta_com_geracao_semanal` | R$ | `measurement` | Quando `semanal` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Mesma formula SCEE usando acumuladores semanais. |
+| Valor conta com geracao mensal | `valor_conta_com_geracao_mensal_r` | `sensor.valor_conta_com_geracao_mensal` | R$ | `measurement` | Quando `mensal` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `max(valor_disponibilidade, energia_nao_compensada*tarifa_final + energia_compensada*fio_b_final)`. |
+| Valor conta com geracao mensal sem disponibilidade | `valor_conta_com_geracao_sem_disponibilidade_mensal_r` | `sensor.valor_conta_com_geracao_mensal_sem_disponibilidade` | R$ | `measurement` | Quando `mensal` e `Geracao/SCEE` estiverem habilitados | Valor SCEE puro: `energia_nao_compensada*tarifa_final + energia_compensada*fio_b_final`, sem minimo. |
+| Valor Fio B compensada diario | `valor_fio_b_compensada_diario_r` | `sensor.valor_fio_b_compensada_diario` | R$ | `measurement` | Quando `diario` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `energia_compensada_diaria_kwh * fio_b_final_r_kwh`. |
+| Valor Fio B compensada semanal | `valor_fio_b_compensada_semanal_r` | `sensor.valor_fio_b_compensada_semanal` | R$ | `measurement` | Quando `semanal` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `energia_compensada_semanal_kwh * fio_b_final_r_kwh`. |
+| Valor Fio B compensada mensal | `valor_fio_b_compensada_mensal_r` | `sensor.valor_fio_b_compensada_mensal` | R$ | `measurement` | Quando `mensal` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `energia_compensada_mensal_kwh * fio_b_final_r_kwh`. |
 
 ## Calculos detalhados
 
@@ -295,7 +301,7 @@ Observacoes:
    - `tarifa_branca_bruta_posto = te_posto + tusd_posto`
    - `tarifa_branca_final_posto = aplicar_tributos_por_dentro(...)`
    - o consumo e rateado por posto com base no delta da entidade acumulada de consumo, respeitando:
-     - horarios default da concessionaria
+     - horarios padrao da concessionaria
      - override manual do usuario
      - sabados e domingos como `fora ponta`
      - feriados nacionais e feriados extras como `fora ponta`
@@ -330,21 +336,21 @@ Limitacoes atuais da release:
 
 - A Tarifa Branca depende da qualidade temporal da entidade acumulada de consumo; leituras muito espacadas reduzem a confianca do rateio por posto.
 - O motor SCEE esta mais robusto no ciclo incremental, mas ainda precisa de validacao contra faturas reais para fechamento fino de casos regulatórios.
-- Sem entidade de injecao configurada, auto-consumo e creditos seguem em modo estimado/fallback a partir dos dados disponiveis.
+- Sem entidade de injecao configurada, auto-consumo e creditos seguem em modo estimado/alternativo a partir dos dados disponiveis.
 - Entidades auxiliares de horario efetivo, posto atual e consumo por posto ainda nao foram expostas; hoje o calculo ja usa essa logica internamente.
 - Extratores web podem exigir ajuste quando houver mudanca de layout das concessionarias.
 
 Regra adicional implementada:
 
-- Aplicacao de ICMS por faixa de consumo mensal (quando regra da concessionaria esta mapeada), com fallback para aliquota base do extrator.
+- Aplicacao de ICMS por faixa de consumo mensal (quando regra da concessionaria esta mapeada), com alternativo para aliquota base do extrator.
 
 ## Fixtures e testes de extratores
 
-- Parsers de tributos foram desacoplados para funcoes testaveis.
+- Analisadors de tributos foram desacoplados para funcoes testaveis.
 - Fixtures iniciais:
   - [cpfl_pis_cofins_sample.html](./tests/fixtures/cpfl_pis_cofins_sample.html)
   - [celesc_tributos_sample.html](./tests/fixtures/celesc_tributos_sample.html)
-- Em alteracao de parser, atualize fixture e execute `pytest` para evitar regressao silenciosa.
+- Em alteracao de analisador, atualize fixture e execute `pytest` para evitar regressao silenciosa.
 
 ## Links de versao
 

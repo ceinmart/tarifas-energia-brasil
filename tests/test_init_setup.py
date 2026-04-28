@@ -38,19 +38,15 @@ def _install_homeassistant_stub() -> None:
 
 
 def _load_init_module():
-    base_dir = (
-        Path(__file__).resolve().parents[1]
-        / "custom_components"
-        / "tarifas_energia_brasil"
-    )
+    base_dir = Path(__file__).resolve().parents[1] / "custom_components" / "tarifas_energia_brasil"
     package_name = "tarifas_energia_brasil_testpkg_init"
     package = types.ModuleType(package_name)
     package.__path__ = [str(base_dir)]  # type: ignore[attr-defined]
     sys.modules[package_name] = package
 
     const_module = types.ModuleType(f"{package_name}.const")
-    const_module.CONF_UPDATE_HOURS = "frequencia_atualizacao_horas"
-    const_module.DEFAULT_UPDATE_HOURS = 24
+    const_module.CONF_HORAS_ATUALIZACAO = "frequencia_atualizacao_horas"
+    const_module.HORAS_ATUALIZACAO_PADRAO = 24
     const_module.DOMAIN = "tarifas_energia_brasil"
     const_module.PLATFORMS = ["sensor"]
     sys.modules[f"{package_name}.const"] = const_module

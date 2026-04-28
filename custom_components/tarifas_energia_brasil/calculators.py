@@ -9,12 +9,12 @@ from __future__ import annotations
 from typing import Any
 
 try:
-    from .const import SUPPLY_BIPHASE, SUPPLY_MONOPHASE, SUPPLY_TRIPHASE
+    from .const import FORNECIMENTO_BIFASICO, FORNECIMENTO_MONOFASICO, FORNECIMENTO_TRIFASICO
 except ImportError:
     # Permite execucao isolada do modulo em testes unitarios sem package context.
-    SUPPLY_MONOPHASE = "monofasico"
-    SUPPLY_BIPHASE = "bifasico"
-    SUPPLY_TRIPHASE = "trifasico"
+    FORNECIMENTO_MONOFASICO = "monofasico"
+    FORNECIMENTO_BIFASICO = "bifasico"
+    FORNECIMENTO_TRIFASICO = "trifasico"
 
 FIO_B_TRANSICAO_POR_ANO: dict[int, float] = {
     2023: 0.15,
@@ -127,11 +127,11 @@ def disponibilidade_minima_kwh(tipo_fornecimento: str) -> float:
     """Retorna limite minimo em kWh para custo de disponibilidade."""
 
     normalized = (tipo_fornecimento or "").lower().strip()
-    if normalized == SUPPLY_MONOPHASE:
+    if normalized == FORNECIMENTO_MONOFASICO:
         return 30.0
-    if normalized == SUPPLY_BIPHASE:
+    if normalized == FORNECIMENTO_BIFASICO:
         return 50.0
-    if normalized == SUPPLY_TRIPHASE:
+    if normalized == FORNECIMENTO_TRIFASICO:
         return 100.0
     return 30.0
 
@@ -142,10 +142,7 @@ def calcular_valor_disponibilidade(
 ) -> float:
     """Calcula valor monetario do custo de disponibilidade."""
 
-    return (
-        disponibilidade_minima_kwh(tipo_fornecimento)
-        * tarifa_convencional_final_r_kwh
-    )
+    return disponibilidade_minima_kwh(tipo_fornecimento) * tarifa_convencional_final_r_kwh
 
 
 def percentual_fio_b_por_ano(ano: int) -> float:
@@ -266,7 +263,9 @@ def calcular_valor_conta_tarifa_branca(
 ) -> float:
     """Calcula o valor monetario da Tarifa Branca por posto tarifario."""
 
-    consumo_total = sum(max(consumo_por_posto_kwh.get(posto, 0.0), 0.0) for posto in consumo_por_posto_kwh)
+    consumo_total = sum(
+        max(consumo_por_posto_kwh.get(posto, 0.0), 0.0) for posto in consumo_por_posto_kwh
+    )
     valor_energia = (
         max(consumo_por_posto_kwh.get("fora_ponta", 0.0), 0.0)
         * tarifa_final_por_posto_r_kwh.get("fora_ponta", 0.0)
@@ -306,9 +305,7 @@ def calcular_scee_simplificado(
 ) -> dict[str, float]:
     """Modelo operacional inicial para valor com geracao/SCEE."""
 
-    energia_disponivel_para_compensar_kwh = max(geracao_kwh, 0.0) + max(
-        credito_entrada_kwh, 0.0
-    )
+    energia_disponivel_para_compensar_kwh = max(geracao_kwh, 0.0) + max(credito_entrada_kwh, 0.0)
     energia_compensada_kwh = min(max(consumo_kwh, 0.0), energia_disponivel_para_compensar_kwh)
     energia_nao_compensada_kwh = max(consumo_kwh - energia_compensada_kwh, 0.0)
 

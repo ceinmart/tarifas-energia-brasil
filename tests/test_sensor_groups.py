@@ -164,11 +164,7 @@ def _load_module(module_name: str, file_path: Path):
     return module
 
 
-_BASE_DIR = (
-    Path(__file__).resolve().parents[1]
-    / "custom_components"
-    / "tarifas_energia_brasil"
-)
+_BASE_DIR = Path(__file__).resolve().parents[1] / "custom_components" / "tarifas_energia_brasil"
 _PKG_NAME = "tarifas_energia_brasil_testpkg_sensor"
 
 if _PKG_NAME not in sys.modules:
@@ -193,24 +189,24 @@ ConfigEntry = sys.modules["homeassistant.config_entries"].ConfigEntry
 EntityCategory = sys.modules["homeassistant.helpers.entity"].EntityCategory
 
 CONF_CONCESSIONARIA = const_module.CONF_CONCESSIONARIA
-CONF_CONSUMPTION_ENTITY = const_module.CONF_CONSUMPTION_ENTITY
-CONF_ENABLE_GENERATION_GROUP = const_module.CONF_ENABLE_GENERATION_GROUP
-CONF_ENABLE_TARIFA_BRANCA_GROUP = const_module.CONF_ENABLE_TARIFA_BRANCA_GROUP
-CONF_GENERATION_ENTITY = const_module.CONF_GENERATION_ENTITY
+CONF_ENTIDADE_CONSUMO = const_module.CONF_ENTIDADE_CONSUMO
+CONF_HABILITAR_GRUPO_GERACAO = const_module.CONF_HABILITAR_GRUPO_GERACAO
+CONF_HABILITAR_GRUPO_TARIFA_BRANCA = const_module.CONF_HABILITAR_GRUPO_TARIFA_BRANCA
+CONF_ENTIDADE_GERACAO = const_module.CONF_ENTIDADE_GERACAO
 TarifasEnergiaBrasilSensor = sensor_impl.TarifasEnergiaBrasilSensor
-build_sensor_descriptions = sensor_impl.build_sensor_descriptions
+montar_descricoes_sensores = sensor_impl.montar_descricoes_sensores
 
 
 def _description_keys(entry: ConfigEntry) -> set[str]:
-    return {description.value_key for description in build_sensor_descriptions(entry)}
+    return {description.chave_valor for description in montar_descricoes_sensores(entry)}
 
 
 def test_regular_group_is_always_present():
     entry = ConfigEntry(
         data={
             CONF_CONCESSIONARIA: "CPFL-PIRATINING",
-            CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
-            CONF_ENABLE_TARIFA_BRANCA_GROUP: False,
+            CONF_ENTIDADE_CONSUMO: "sensor.consumo_total",
+            CONF_HABILITAR_GRUPO_TARIFA_BRANCA: False,
         },
         options={},
     )
@@ -218,21 +214,21 @@ def test_regular_group_is_always_present():
     keys = _description_keys(entry)
 
     assert "tarifa_convencional_final_r_kwh" in keys
-    assert "valor_conta_consumo_regular_daily_r" in keys
-    assert "valor_conta_consumo_regular_sem_disponibilidade_monthly_r" in keys
-    assert "valor_conta_consumo_regular_sem_disponibilidade_daily_r" not in keys
-    assert "valor_conta_tarifa_branca_daily_r" not in keys
-    assert "valor_conta_com_geracao_daily_r" not in keys
+    assert "valor_conta_consumo_regular_diario_r" in keys
+    assert "valor_conta_consumo_regular_sem_disponibilidade_mensal_r" in keys
+    assert "valor_conta_consumo_regular_sem_disponibilidade_diario_r" not in keys
+    assert "valor_conta_tarifa_branca_diario_r" not in keys
+    assert "valor_conta_com_geracao_diario_r" not in keys
 
 
 def test_generation_group_depends_on_entity_and_toggle():
     entry = ConfigEntry(
         data={
             CONF_CONCESSIONARIA: "CPFL-PIRATINING",
-            CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
-            CONF_GENERATION_ENTITY: "sensor.geracao_total",
-            CONF_ENABLE_GENERATION_GROUP: True,
-            CONF_ENABLE_TARIFA_BRANCA_GROUP: False,
+            CONF_ENTIDADE_CONSUMO: "sensor.consumo_total",
+            CONF_ENTIDADE_GERACAO: "sensor.geracao_total",
+            CONF_HABILITAR_GRUPO_GERACAO: True,
+            CONF_HABILITAR_GRUPO_TARIFA_BRANCA: False,
         },
         options={},
     )
@@ -240,18 +236,31 @@ def test_generation_group_depends_on_entity_and_toggle():
     keys = _description_keys(entry)
 
     assert "fio_b_final_r_kwh" in keys
-    assert "valor_conta_com_geracao_monthly_r" in keys
-    assert "valor_conta_com_geracao_sem_disponibilidade_monthly_r" in keys
-    assert "valor_conta_com_geracao_sem_disponibilidade_daily_r" not in keys
-    assert "valor_fio_b_compensada_monthly_r" in keys
+    assert "auto_consumo_kwh" in keys
+    assert "auto_consumo_reais" in keys
+    assert "auto_consumo_diario_kwh" in keys
+    assert "auto_consumo_diario_reais" in keys
+    assert "auto_consumo_semanal_kwh" not in keys
+    assert "auto_consumo_mensal_kwh" in keys
+    assert "auto_consumo_mensal_reais" in keys
+    assert "valor_conta_com_geracao_mensal_r" in keys
+    assert "valor_conta_com_geracao_sem_disponibilidade_mensal_r" in keys
+    assert "valor_conta_com_geracao_sem_disponibilidade_diario_r" not in keys
+    assert "valor_fio_b_compensada_mensal_r" in keys
+
+    descriptions = {
+        description.chave_valor: description for description in montar_descricoes_sensores(entry)
+    }
+    assert descriptions["auto_consumo_kwh"].name == "Auto-consumo acumulado"
+    assert descriptions["auto_consumo_reais"].name == "Auto-consumo acumulado em reais"
 
 
 def test_tarifa_branca_group_respects_toggle():
     entry = ConfigEntry(
         data={
             CONF_CONCESSIONARIA: "CPFL-PIRATINING",
-            CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
-            CONF_ENABLE_TARIFA_BRANCA_GROUP: True,
+            CONF_ENTIDADE_CONSUMO: "sensor.consumo_total",
+            CONF_HABILITAR_GRUPO_TARIFA_BRANCA: True,
         },
         options={},
     )
@@ -259,16 +268,16 @@ def test_tarifa_branca_group_respects_toggle():
     keys = _description_keys(entry)
 
     assert "tarifa_branca_ponta_final_r_kwh" in keys
-    assert "valor_conta_tarifa_branca_monthly_r" in keys
-    assert "valor_conta_tarifa_branca_sem_disponibilidade_monthly_r" in keys
-    assert "valor_conta_tarifa_branca_sem_disponibilidade_daily_r" not in keys
+    assert "valor_conta_tarifa_branca_mensal_r" in keys
+    assert "valor_conta_tarifa_branca_sem_disponibilidade_mensal_r" in keys
+    assert "valor_conta_tarifa_branca_sem_disponibilidade_diario_r" not in keys
 
 
 def test_legacy_entry_keeps_tarifa_branca_visible_until_user_opts_out():
     entry = ConfigEntry(
         data={
             CONF_CONCESSIONARIA: "CPFL-PIRATINING",
-            CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
+            CONF_ENTIDADE_CONSUMO: "sensor.consumo_total",
         },
         options={},
     )
@@ -276,20 +285,20 @@ def test_legacy_entry_keeps_tarifa_branca_visible_until_user_opts_out():
     keys = _description_keys(entry)
 
     assert "tarifa_branca_fora_ponta_final_r_kwh" in keys
-    assert "valor_conta_tarifa_branca_daily_r" in keys
+    assert "valor_conta_tarifa_branca_diario_r" in keys
 
 
 def test_entities_share_single_device_and_keep_unique_ids():
     entry = ConfigEntry(
         data={
             CONF_CONCESSIONARIA: "CPFL-PIRATINING",
-            CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
-            CONF_ENABLE_TARIFA_BRANCA_GROUP: True,
+            CONF_ENTIDADE_CONSUMO: "sensor.consumo_total",
+            CONF_HABILITAR_GRUPO_TARIFA_BRANCA: True,
         },
         options={},
     )
-    descriptions = build_sensor_descriptions(entry)
-    by_key = {description.value_key: description for description in descriptions}
+    descriptions = montar_descricoes_sensores(entry)
+    by_key = {description.chave_valor: description for description in descriptions}
 
     class DummyCoordinator:
         data = None
@@ -305,7 +314,9 @@ def test_entities_share_single_device_and_keep_unique_ids():
         description=by_key["tarifa_branca_ponta_final_r_kwh"],
     )
 
-    assert regular_entity._attr_device_info.identifiers == branca_entity._attr_device_info.identifiers
+    assert (
+        regular_entity._attr_device_info.identifiers == branca_entity._attr_device_info.identifiers
+    )
     assert regular_entity._attr_unique_id != branca_entity._attr_unique_id
 
 
@@ -313,13 +324,13 @@ def test_technical_regular_sensors_are_marked_as_diagnostic():
     entry = ConfigEntry(
         data={
             CONF_CONCESSIONARIA: "CPFL-PIRATINING",
-            CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
-            CONF_ENABLE_TARIFA_BRANCA_GROUP: False,
+            CONF_ENTIDADE_CONSUMO: "sensor.consumo_total",
+            CONF_HABILITAR_GRUPO_TARIFA_BRANCA: False,
         },
         options={},
     )
 
-    descriptions = {item.value_key: item for item in build_sensor_descriptions(entry)}
+    descriptions = {item.chave_valor: item for item in montar_descricoes_sensores(entry)}
 
     assert descriptions["te_convencional_r_kwh"].entity_category == EntityCategory.DIAGNOSTIC
     assert descriptions["tarifa_convencional_final_r_kwh"].entity_category is None
@@ -329,24 +340,24 @@ def test_numeric_native_value_is_rounded_to_four_decimal_places():
     entry = ConfigEntry(
         data={
             CONF_CONCESSIONARIA: "CPFL-PIRATINING",
-            CONF_CONSUMPTION_ENTITY: "sensor.consumo_total",
-            CONF_ENABLE_TARIFA_BRANCA_GROUP: False,
+            CONF_ENTIDADE_CONSUMO: "sensor.consumo_total",
+            CONF_HABILITAR_GRUPO_TARIFA_BRANCA: False,
         },
         options={},
     )
     description = next(
         item
-        for item in build_sensor_descriptions(entry)
-        if item.value_key == "tarifa_convencional_final_r_kwh"
+        for item in montar_descricoes_sensores(entry)
+        if item.chave_valor == "tarifa_convencional_final_r_kwh"
     )
 
     class DummyCoordinator:
         data = types.SimpleNamespace(
-            values={"tarifa_convencional_final_r_kwh": 0.787910097997443},
+            valores={"tarifa_convencional_final_r_kwh": 0.787910097997443},
             concessionaria="CPFL-PIRATINING",
-            updated_at=types.SimpleNamespace(isoformat=lambda: "2026-04-23T18:00:00-03:00"),
-            collections_by_key={},
-            diagnostics={},
+            atualizado_em=types.SimpleNamespace(isoformat=lambda: "2026-04-23T18:00:00-03:00"),
+            coletas_por_chave={},
+            diagnosticos={},
         )
 
     entity = TarifasEnergiaBrasilSensor(

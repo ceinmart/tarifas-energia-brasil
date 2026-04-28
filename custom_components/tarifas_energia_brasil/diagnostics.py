@@ -8,16 +8,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.diagnostics import async_redact_data
+from homeassistant.components.diagnosticos import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_CONSUMPTION_ENTITY, CONF_GENERATION_ENTITY, DOMAIN
+from .const import CONF_ENTIDADE_CONSUMO, CONF_ENTIDADE_GERACAO, DOMAIN
 
-TO_REDACT = {CONF_CONSUMPTION_ENTITY, CONF_GENERATION_ENTITY}
+TO_REDACT = {CONF_ENTIDADE_CONSUMO, CONF_ENTIDADE_GERACAO}
 
 
-async def async_get_config_entry_diagnostics(
+async def async_get_config_entry_diagnosticos(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> dict[str, Any]:
@@ -36,8 +36,8 @@ async def async_get_config_entry_diagnostics(
             "last_exception": str(coordinator.last_exception)
             if coordinator.last_exception
             else None,
-            "snapshot": coordinator.data.values if coordinator.data else None,
-            "diagnostics": coordinator.data.diagnostics if coordinator.data else None,
+            "snapshot": coordinator.data.valores if coordinator.data else None,
+            "diagnosticos": coordinator.data.diagnosticos if coordinator.data else None,
         },
     }
     return async_redact_data(payload, TO_REDACT)

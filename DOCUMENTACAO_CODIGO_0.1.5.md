@@ -9,7 +9,7 @@ Este documento registra o estado tecnico da release `0.1.5`. Alteracoes historic
 
 ## Atualizacao 0.1.5
 
-A versao `0.1.5` corrige a persistencia do timeout na coleta de Fio B via fallback CSV.
+A versao `0.1.5` corrige a persistencia do timeout na coleta de Fio B via alternativo CSV.
 
 O problema observado em campo era:
 
@@ -30,7 +30,7 @@ Mesmo com timeout de `600s`, a coleta de Fio B podia expirar porque o fluxo ante
 5. se encontrar Fio B convencional vigente, retorna sem baixar resources antigos desnecessarios;
 6. se um resource falhar, registra o erro e segue para o proximo resource do mesmo metodo.
 
-Para o fallback CSV, foi adicionado criterio de encerramento antecipado: quando uma linha filtrada permite selecionar Fio B convencional vigente com rank maximo, a leitura do CSV e interrompida sem esperar o fim do arquivo.
+Para o alternativo CSV, foi adicionado criterio de encerramento antecipado: quando uma linha filtrada permite selecionar Fio B convencional vigente com rank maximo, a leitura do CSV e interrompida sem esperar o fim do arquivo.
 
 ## Logs de validacao de download
 

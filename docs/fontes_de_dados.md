@@ -20,7 +20,7 @@
 - CELESC:
   - https://www.celesc.com.br/tarifas-de-energia
 
-## Prioridade e fallback
+## Prioridade e alternativo
 
 1. `datastore_search`
 2. `datastore_search_sql`

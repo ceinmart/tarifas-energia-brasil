@@ -169,16 +169,16 @@ def guess_pis_cofins_from_percent_list(text: str) -> tuple[float, float]:
     """Estima PIS/COFINS a partir da lista de percentuais candidatos."""
 
     raw = re.findall(r"(\d{1,2}(?:[.,]\d{1,4})?)\s*%", normalize_key(text))
-    values: list[float] = []
+    valores: list[float] = []
     for item in raw:
         try:
             parsed = _to_float_percent(item)
         except ValueError:
             continue
         if 0 < parsed < 10:
-            values.append(parsed)
+            valores.append(parsed)
 
-    unique_sorted = sorted(set(values))
+    unique_sorted = sorted(set(valores))
     if len(unique_sorted) >= 2:
         return unique_sorted[0], unique_sorted[1]
     if len(unique_sorted) == 1:

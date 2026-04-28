@@ -13,37 +13,38 @@ from homeassistant import config_entries
 from homeassistant.helpers import selector
 
 from .const import (
-    CONF_ANEEL_METHOD,
-    CONF_BREAKDOWNS,
     CONF_CONCESSIONARIA,
-    CONF_CONSUMPTION_ENTITY,
-    CONF_ENABLE_GENERATION_GROUP,
-    CONF_ENABLE_TARIFA_BRANCA_GROUP,
-    CONF_GENERATION_ENTITY,
-    CONF_INJECTION_ENTITY,
-    CONF_READING_DAY,
-    CONF_SUPPLY_TYPE,
-    CONF_TB_EXTRA_HOLIDAYS,
-    CONF_TB_INTERMEDIATE1_END,
-    CONF_TB_INTERMEDIATE1_START,
-    CONF_TB_INTERMEDIATE2_END,
-    CONF_TB_INTERMEDIATE2_START,
-    CONF_TB_PONTA_END,
-    CONF_TB_PONTA_START,
-    CONF_UPDATE_HOURS,
-    DEFAULT_ANEEL_METHOD,
-    DEFAULT_BREAKDOWNS,
-    DEFAULT_ENABLE_TARIFA_BRANCA_GROUP,
-    DEFAULT_READING_DAY,
-    DEFAULT_UPDATE_HOURS,
+    CONF_DIA_LEITURA,
+    CONF_ENTIDADE_CONSUMO,
+    CONF_ENTIDADE_GERACAO,
+    CONF_ENTIDADE_INJECAO,
+    CONF_HABILITAR_GRUPO_GERACAO,
+    CONF_HABILITAR_GRUPO_TARIFA_BRANCA,
+    CONF_HORAS_ATUALIZACAO,
+    CONF_METODO_ANEEL,
+    CONF_QUEBRAS_CALCULO,
+    CONF_TB_FERIADOS_EXTRAS,
+    CONF_TB_INTERMEDIARIO1_FIM,
+    CONF_TB_INTERMEDIARIO1_INICIO,
+    CONF_TB_INTERMEDIARIO2_FIM,
+    CONF_TB_INTERMEDIARIO2_INICIO,
+    CONF_TB_PONTA_FIM,
+    CONF_TB_PONTA_INICIO,
+    CONF_TIPO_FORNECIMENTO,
+    DIA_LEITURA_PADRAO,
     DOMAIN,
-    SUPPORTED_ANEEL_METHODS,
-    SUPPORTED_SUPPLY_TYPES,
-    get_supported_concessionarias_for_flow,
-    is_generation_group_enabled,
-    is_tarifa_branca_group_enabled,
+    HABILITAR_GRUPO_TARIFA_BRANCA_PADRAO,
+    HORAS_ATUALIZACAO_PADRAO,
+    METODO_ANEEL_PADRAO,
+    METODOS_ANEEL_SUPORTADOS,
+    QUEBRA_SEMANAL,
+    QUEBRAS_PADRAO,
+    TIPOS_FORNECIMENTO_SUPORTADOS,
+    grupo_geracao_habilitado,
+    grupo_tarifa_branca_habilitado,
+    obter_concessionarias_suportadas_para_fluxo,
 )
-from .tarifa_branca_time import get_default_tarifa_branca_windows
+from .tarifa_branca_time import obter_janelas_padrao_tarifa_branca
 
 
 class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -56,17 +57,17 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         errors: dict[str, str] = {}
         if user_input is not None:
-            normalized_input = self._normalize_entry_payload(user_input)
-            generation_entity = normalized_input.get(CONF_GENERATION_ENTITY)
-            injection_entity = normalized_input.get(CONF_INJECTION_ENTITY)
-            supply_type = normalized_input.get(CONF_SUPPLY_TYPE)
-            if (generation_entity or injection_entity) and not supply_type:
-                errors["base"] = "supply_type_required"
+            entrada_normalizada = self._normalize_entry_payload(user_input)
+            entidade_geracao = entrada_normalizada.get(CONF_ENTIDADE_GERACAO)
+            entidade_injecao = entrada_normalizada.get(CONF_ENTIDADE_INJECAO)
+            tipo_fornecimento = entrada_normalizada.get(CONF_TIPO_FORNECIMENTO)
+            if (entidade_geracao or entidade_injecao) and not tipo_fornecimento:
+                errors["base"] = "tipo_fornecimento_obrigatorio"
             else:
-                await self.async_set_unique_id(normalized_input[CONF_CONCESSIONARIA])
+                await self.async_set_unique_id(entrada_normalizada[CONF_CONCESSIONARIA])
                 self._abort_if_unique_id_configured()
-                title = f"Tarifas Energia Brasil - {normalized_input[CONF_CONCESSIONARIA]}"
-                return self.async_create_entry(title=title, data=normalized_input)
+                title = f"Tarifas Energia Brasil - {entrada_normalizada[CONF_CONCESSIONARIA]}"
+                return self.async_create_entry(title=title, data=entrada_normalizada)
 
         schema = self._build_schema(user_input)
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
@@ -75,7 +76,7 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def _build_schema(
         user_input: dict[str, Any] | None = None,
         *,
-        include_group_options: bool = False,
+        incluir_opcoes_grupo: bool = False,
     ) -> vol.Schema:
         """Monta schema principal de configuracao."""
 
@@ -85,17 +86,17 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_CONCESSIONARIA,
                 default=defaults.get(
                     CONF_CONCESSIONARIA,
-                    get_supported_concessionarias_for_flow()[0],
+                    obter_concessionarias_suportadas_para_fluxo()[0],
                 ),
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=get_supported_concessionarias_for_flow(),
+                    options=obter_concessionarias_suportadas_para_fluxo(),
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
             vol.Required(
-                CONF_READING_DAY,
-                default=int(defaults.get(CONF_READING_DAY, DEFAULT_READING_DAY)),
+                CONF_DIA_LEITURA,
+                default=int(defaults.get(CONF_DIA_LEITURA, DIA_LEITURA_PADRAO)),
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=1,
@@ -105,8 +106,8 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             ),
             vol.Required(
-                CONF_UPDATE_HOURS,
-                default=int(defaults.get(CONF_UPDATE_HOURS, DEFAULT_UPDATE_HOURS)),
+                CONF_HORAS_ATUALIZACAO,
+                default=int(defaults.get(CONF_HORAS_ATUALIZACAO, HORAS_ATUALIZACAO_PADRAO)),
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=1,
@@ -116,17 +117,17 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             ),
             vol.Required(
-                CONF_ANEEL_METHOD,
-                default=defaults.get(CONF_ANEEL_METHOD, DEFAULT_ANEEL_METHOD),
+                CONF_METODO_ANEEL,
+                default=defaults.get(CONF_METODO_ANEEL, METODO_ANEEL_PADRAO),
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=list(SUPPORTED_ANEEL_METHODS),
+                    options=list(METODOS_ANEEL_SUPORTADOS),
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
             vol.Required(
-                CONF_CONSUMPTION_ENTITY,
-                default=defaults.get(CONF_CONSUMPTION_ENTITY),
+                CONF_ENTIDADE_CONSUMO,
+                default=defaults.get(CONF_ENTIDADE_CONSUMO),
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain=["sensor"],
@@ -134,8 +135,8 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             ),
             vol.Optional(
-                CONF_GENERATION_ENTITY,
-                default=defaults.get(CONF_GENERATION_ENTITY),
+                CONF_ENTIDADE_GERACAO,
+                default=defaults.get(CONF_ENTIDADE_GERACAO),
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain=["sensor"],
@@ -143,8 +144,8 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             ),
             vol.Optional(
-                CONF_INJECTION_ENTITY,
-                default=defaults.get(CONF_INJECTION_ENTITY),
+                CONF_ENTIDADE_INJECAO,
+                default=defaults.get(CONF_ENTIDADE_INJECAO),
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain=["sensor"],
@@ -152,57 +153,57 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             ),
             vol.Optional(
-                CONF_SUPPLY_TYPE,
-                default=defaults.get(CONF_SUPPLY_TYPE),
+                CONF_TIPO_FORNECIMENTO,
+                default=defaults.get(CONF_TIPO_FORNECIMENTO),
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=list(SUPPORTED_SUPPLY_TYPES),
+                    options=list(TIPOS_FORNECIMENTO_SUPORTADOS),
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
             vol.Required(
-                CONF_BREAKDOWNS,
-                default=defaults.get(CONF_BREAKDOWNS, DEFAULT_BREAKDOWNS),
+                CONF_QUEBRAS_CALCULO,
+                default=defaults.get(CONF_QUEBRAS_CALCULO, QUEBRAS_PADRAO),
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=list(DEFAULT_BREAKDOWNS + ["weekly"]),
+                    options=list(QUEBRAS_PADRAO + [QUEBRA_SEMANAL]),
                     multiple=True,
                     mode=selector.SelectSelectorMode.LIST,
                 )
             ),
         }
 
-        if include_group_options:
-            if defaults.get(CONF_GENERATION_ENTITY) or defaults.get(CONF_INJECTION_ENTITY):
+        if incluir_opcoes_grupo:
+            if defaults.get(CONF_ENTIDADE_GERACAO) or defaults.get(CONF_ENTIDADE_INJECAO):
                 schema[
                     vol.Required(
-                        CONF_ENABLE_GENERATION_GROUP,
-                        default=is_generation_group_enabled(defaults),
+                        CONF_HABILITAR_GRUPO_GERACAO,
+                        default=grupo_geracao_habilitado(defaults),
                     )
                 ] = bool
             schema[
                 vol.Required(
-                    CONF_ENABLE_TARIFA_BRANCA_GROUP,
-                    default=is_tarifa_branca_group_enabled(defaults),
-                    )
-                ] = bool
+                    CONF_HABILITAR_GRUPO_TARIFA_BRANCA,
+                    default=grupo_tarifa_branca_habilitado(defaults),
+                )
+            ] = bool
 
             concessionaria_for_defaults = str(
                 defaults.get(
                     CONF_CONCESSIONARIA,
-                    get_supported_concessionarias_for_flow()[0],
+                    obter_concessionarias_suportadas_para_fluxo()[0],
                 )
             )
-            tb_defaults, _tb_source = get_default_tarifa_branca_windows(
+            tb_defaults, _tb_source = obter_janelas_padrao_tarifa_branca(
                 concessionaria_for_defaults
             )
             for field in (
-                CONF_TB_PONTA_START,
-                CONF_TB_PONTA_END,
-                CONF_TB_INTERMEDIATE1_START,
-                CONF_TB_INTERMEDIATE1_END,
-                CONF_TB_INTERMEDIATE2_START,
-                CONF_TB_INTERMEDIATE2_END,
+                CONF_TB_PONTA_INICIO,
+                CONF_TB_PONTA_FIM,
+                CONF_TB_INTERMEDIARIO1_INICIO,
+                CONF_TB_INTERMEDIARIO1_FIM,
+                CONF_TB_INTERMEDIARIO2_INICIO,
+                CONF_TB_INTERMEDIARIO2_FIM,
             ):
                 schema[
                     vol.Optional(
@@ -212,8 +213,8 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ] = str
             schema[
                 vol.Optional(
-                    CONF_TB_EXTRA_HOLIDAYS,
-                    default=defaults.get(CONF_TB_EXTRA_HOLIDAYS, ""),
+                    CONF_TB_FERIADOS_EXTRAS,
+                    default=defaults.get(CONF_TB_FERIADOS_EXTRAS, ""),
                 )
             ] = str
 
@@ -224,16 +225,16 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Aplica defaults persistidos para os grupos da integracao."""
 
         normalized = dict(user_input)
-        has_generation = bool(
-            normalized.get(CONF_GENERATION_ENTITY) or normalized.get(CONF_INJECTION_ENTITY)
+        possui_geracao = bool(
+            normalized.get(CONF_ENTIDADE_GERACAO) or normalized.get(CONF_ENTIDADE_INJECAO)
         )
 
-        normalized[CONF_ENABLE_GENERATION_GROUP] = (
-            is_generation_group_enabled(normalized) if has_generation else False
+        normalized[CONF_HABILITAR_GRUPO_GERACAO] = (
+            grupo_geracao_habilitado(normalized) if possui_geracao else False
         )
-        normalized[CONF_ENABLE_TARIFA_BRANCA_GROUP] = normalized.get(
-            CONF_ENABLE_TARIFA_BRANCA_GROUP,
-            DEFAULT_ENABLE_TARIFA_BRANCA_GROUP,
+        normalized[CONF_HABILITAR_GRUPO_TARIFA_BRANCA] = normalized.get(
+            CONF_HABILITAR_GRUPO_TARIFA_BRANCA,
+            HABILITAR_GRUPO_TARIFA_BRANCA_PADRAO,
         )
         return normalized
 
@@ -258,20 +259,20 @@ class TarifasEnergiaBrasilOptionsFlow(config_entries.OptionsFlow):
 
         errors: dict[str, str] = {}
         if user_input is not None:
-            normalized_input = TarifasEnergiaBrasilConfigFlow._normalize_entry_payload(
+            entrada_normalizada = TarifasEnergiaBrasilConfigFlow._normalize_entry_payload(
                 user_input
             )
-            generation_entity = normalized_input.get(CONF_GENERATION_ENTITY)
-            injection_entity = normalized_input.get(CONF_INJECTION_ENTITY)
-            supply_type = normalized_input.get(CONF_SUPPLY_TYPE)
-            if (generation_entity or injection_entity) and not supply_type:
-                errors["base"] = "supply_type_required"
+            entidade_geracao = entrada_normalizada.get(CONF_ENTIDADE_GERACAO)
+            entidade_injecao = entrada_normalizada.get(CONF_ENTIDADE_INJECAO)
+            tipo_fornecimento = entrada_normalizada.get(CONF_TIPO_FORNECIMENTO)
+            if (entidade_geracao or entidade_injecao) and not tipo_fornecimento:
+                errors["base"] = "tipo_fornecimento_obrigatorio"
             else:
-                return self.async_create_entry(title="", data=normalized_input)
+                return self.async_create_entry(title="", data=entrada_normalizada)
 
         schema = TarifasEnergiaBrasilConfigFlow._build_schema(
             self._current_defaults(user_input),
-            include_group_options=True,
+            incluir_opcoes_grupo=True,
         )
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
 
@@ -284,10 +285,8 @@ class TarifasEnergiaBrasilOptionsFlow(config_entries.OptionsFlow):
             **self._config_entry.data,
             **self._config_entry.options,
         }
-        if CONF_ENABLE_GENERATION_GROUP not in defaults:
-            defaults[CONF_ENABLE_GENERATION_GROUP] = is_generation_group_enabled(defaults)
-        if CONF_ENABLE_TARIFA_BRANCA_GROUP not in defaults:
-            defaults[CONF_ENABLE_TARIFA_BRANCA_GROUP] = is_tarifa_branca_group_enabled(
-                defaults
-            )
+        if CONF_HABILITAR_GRUPO_GERACAO not in defaults:
+            defaults[CONF_HABILITAR_GRUPO_GERACAO] = grupo_geracao_habilitado(defaults)
+        if CONF_HABILITAR_GRUPO_TARIFA_BRANCA not in defaults:
+            defaults[CONF_HABILITAR_GRUPO_TARIFA_BRANCA] = grupo_tarifa_branca_habilitado(defaults)
         return defaults
