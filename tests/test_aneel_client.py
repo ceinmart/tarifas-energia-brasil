@@ -204,6 +204,7 @@ tributos_module = _load_module(f"{_PKG_NAME}.tributos", _BASE_DIR / "tributos" /
 AneelClient = aneel_module.AneelClient
 ANEEL_CSV_TIMEOUT_SECONDS = aneel_module.ANEEL_CSV_TIMEOUT_SECONDS
 ANEEL_JSON_TIMEOUT_SECONDS = aneel_module.ANEEL_JSON_TIMEOUT_SECONDS
+DATASTORE_SEARCH_PAGE_LIMIT = aneel_module.DATASTORE_SEARCH_PAGE_LIMIT
 RESOURCE_FIO_B_ANOS = aneel_module.AneelClient.RESOURCE_FIO_B_ANOS
 TRIBUTOS_HTTP_TIMEOUT_SECONDS = tributos_module.TRIBUTOS_HTTP_TIMEOUT_SECONDS
 
@@ -319,6 +320,33 @@ def test_aneel_json_requests_use_extended_timeout():
     assert payload["success"] is True
     assert session.calls[0]["timeout"] == ANEEL_JSON_TIMEOUT_SECONDS
     assert ANEEL_JSON_TIMEOUT_SECONDS == 120
+
+
+def test_datastore_search_uses_smaller_pages_without_total_count():
+    session = _FakeSession(
+        [
+            _FakeResponse(
+                payload={
+                    "success": True,
+                    "result": {"records": [{"SigAgente": "CPFL-PIRATINING"}]},
+                }
+            )
+        ]
+    )
+    client = AneelClient(session=session)
+
+    records = asyncio.run(
+        client._datastore_search_records(
+            resource_id="resource-id",
+            filters={"SigAgente": "CPFL-PIRATINING"},
+        )
+    )
+
+    params = session.calls[0]["params"]
+    assert records == [{"SigAgente": "CPFL-PIRATINING"}]
+    assert params["limit"] == DATASTORE_SEARCH_PAGE_LIMIT
+    assert DATASTORE_SEARCH_PAGE_LIMIT == 1000
+    assert params["include_total"] == "false"
 
 
 def test_csv_fallback_uses_extended_timeout_and_filters_streamed_chunks():

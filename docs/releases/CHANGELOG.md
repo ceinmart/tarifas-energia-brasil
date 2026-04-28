@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.9 - 2026-04-28
+
+### Corrigido
+
+- A primeira coleta externa sem snapshot valido passa a reagendar nova tentativa em ate 15 minutos, evitando aguardar o ciclo diario inteiro quando o portal ANEEL oscila temporariamente.
+- `datastore_search` da ANEEL passa a usar paginas menores (`limit=1000`) e `include_total=false`, reduzindo carga no CKAN e melhorando a resistencia a erros `500`/conexao durante consultas paginadas.
+- Alinhada a versao declarada em `const.py` com `manifest.json` e README.
+
 ## 0.1.8 - 2026-04-28
 
 ### Corrigido

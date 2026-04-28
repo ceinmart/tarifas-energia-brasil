@@ -10,7 +10,7 @@ import importlib.util
 import sys
 import types
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 
@@ -216,6 +216,46 @@ def test_prepare_delta_context_reinitializes_reference_when_sensor_resets():
     assert context["reset_detected"] is True
     assert context["raw_delta_kwh"] == pytest.approx(-988.67)
     assert context["delta_kwh"] == pytest.approx(0.0)
+
+
+def test_initial_failure_uses_short_retry_interval_without_cached_snapshot():
+    coordinator = _build_coordinator()
+    coordinator._configured_update_interval = timedelta(hours=24)
+    coordinator.update_interval = timedelta(hours=24)
+    coordinator.data = None
+
+    retry_interval = coordinator._failure_retry_interval(has_snapshot=False)
+
+    assert retry_interval == timedelta(minutes=15)
+    assert coordinator.update_interval == timedelta(minutes=15)
+
+
+def test_failure_keeps_regular_interval_when_cached_snapshot_exists():
+    coordinator = _build_coordinator()
+    coordinator._configured_update_interval = timedelta(hours=24)
+    coordinator.update_interval = timedelta(hours=24)
+    coordinator.data = ResultadoCalculo(
+        atualizado_em=datetime(2026, 4, 27, 10, 0, tzinfo=UTC),
+        concessionaria="CPFL-PIRATINING",
+        valores={"tarifa_convencional_final_r_kwh": 0.9748},
+        coletas_por_chave={},
+        diagnosticos={},
+    )
+
+    retry_interval = coordinator._failure_retry_interval(has_snapshot=True)
+
+    assert retry_interval == timedelta(hours=24)
+    assert coordinator.update_interval == timedelta(hours=24)
+
+
+def test_success_restores_regular_interval_after_initial_retry():
+    coordinator = _build_coordinator()
+    coordinator._configured_update_interval = timedelta(hours=24)
+    coordinator.update_interval = timedelta(minutes=15)
+
+    coordinator._restore_regular_update_interval()
+
+    assert coordinator.update_interval == timedelta(hours=24)
 
 
 def test_cached_snapshot_roundtrip_restores_sensor_valores_after_restart():

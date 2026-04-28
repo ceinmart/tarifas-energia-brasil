@@ -37,6 +37,7 @@ CSV_STREAM_CHUNK_SIZE = 64 * 1024
 CSV_STREAM_ENCODING = "latin-1"
 CSV_PROGRESS_LOG_INTERVAL_SECONDS = 60
 CSV_PROGRESS_LOG_INTERVAL_BYTES = 100 * 1024 * 1024
+DATASTORE_SEARCH_PAGE_LIMIT = 1000
 
 
 class AneelClientError(Exception):
@@ -319,7 +320,7 @@ class AneelClient:
         """Consulta paginada via datastore_search."""
 
         records: list[dict[str, Any]] = []
-        limit = 3000
+        limit = DATASTORE_SEARCH_PAGE_LIMIT
         offset = 0
 
         while True:
@@ -327,6 +328,7 @@ class AneelClient:
                 "resource_id": resource_id,
                 "limit": limit,
                 "offset": offset,
+                "include_total": "false",
             }
             if filters:
                 params["filters"] = json.dumps(filters, ensure_ascii=False)

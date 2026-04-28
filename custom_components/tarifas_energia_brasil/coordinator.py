@@ -78,6 +78,7 @@ from .tributos import extract_tributos
 
 _LOGGER = logging.getLogger(__name__)
 _STATE_STORAGE_VERSION = 1
+_INITIAL_FAILURE_RETRY_INTERVAL = timedelta(minutes=15)
 
 
 class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
@@ -121,11 +122,13 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
         self._tarifa_branca_invalid_extra_holidays: list[str] = []
         self._unsub_state_listeners: list[Any] = []
 
+        self._configured_update_interval = timedelta(hours=self._effective_update_hours())
+
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN}_{entry.entry_id}",
-            update_interval=timedelta(hours=self._effective_update_hours()),
+            update_interval=self._configured_update_interval,
         )
 
     @staticmethod
@@ -1305,7 +1308,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
             RuntimeError,
             Exception,
         ) as err:
-            retry_interval = self.update_interval or timedelta(hours=self._effective_update_hours())
+            retry_interval = self._failure_retry_interval(has_snapshot=self.data is not None)
             retry_at = now + retry_interval
             if self.data is not None:
                 _LOGGER.warning(
@@ -1334,7 +1337,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
                 (
                     "Coleta inicial de tarifas falhou para %s e nao ha snapshot "
                     "valido em cache para restaurar sensores. Proxima tentativa "
-                    "automatica prevista para %s (intervalo=%s). Erro: %s"
+                    "automatica prevista para %s (intervalo_temporario=%s). Erro: %s"
                 ),
                 self.config_entry.entry_id,
                 retry_at.isoformat(),
@@ -1342,6 +1345,8 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
                 err,
             )
             raise UpdateFailed(f"Falha na coleta inicial: {err}") from err
+
+        self._restore_regular_update_interval()
 
         tarifas_data, tarifas_meta = tarifas_result
         fio_b_data, fio_b_meta = fio_b_result
@@ -1550,6 +1555,31 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
             return max(int(value), 1)
         except (TypeError, ValueError):
             return HORAS_ATUALIZACAO_PADRAO
+
+    def _failure_retry_interval(self, *, has_snapshot: bool) -> timedelta:
+        """Ajusta a proxima tentativa apos falha externa."""
+
+        regular_interval = self._regular_update_interval()
+        if has_snapshot:
+            self.update_interval = regular_interval
+            return regular_interval
+
+        retry_interval = min(regular_interval, _INITIAL_FAILURE_RETRY_INTERVAL)
+        self.update_interval = retry_interval
+        return retry_interval
+
+    def _restore_regular_update_interval(self) -> None:
+        """Restaura a cadencia configurada apos uma coleta bem-sucedida."""
+
+        self.update_interval = self._regular_update_interval()
+
+    def _regular_update_interval(self) -> timedelta:
+        """Retorna a cadencia configurada pelo usuario."""
+
+        configured = getattr(self, "_configured_update_interval", None)
+        if isinstance(configured, timedelta):
+            return configured
+        return timedelta(hours=self._effective_update_hours())
 
     def _effective_breakdowns(self) -> list[str]:
         """Retorna lista valida de quebras de calculo."""
