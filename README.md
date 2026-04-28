@@ -1,3 +1,7 @@
+# ALERTA
+
+Este codigo foi gerado 100% por IA e ainda nao foi revisado por um humano. Estou a procura de alguem para revisar e manter este projeto.
+
 # Tarifas Energia Brasil
 
 ![Icone Tarifas Energia Brasil](./custom_components/tarifas_energia_brasil/brand/icon.png)
