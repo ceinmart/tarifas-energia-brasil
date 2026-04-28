@@ -349,6 +349,65 @@ def test_datastore_search_uses_smaller_pages_without_total_count():
     assert params["include_total"] == "false"
 
 
+def test_pick_latest_bandeira_includes_month_vigencia_period():
+    client = AneelClient(session=None)
+
+    result = client._pick_latest_bandeira(
+        records=[
+            {
+                "DatCompetencia": "2026-03",
+                "DscBandeiraTarifaria": "Amarela",
+            },
+            {
+                "DatCompetencia": "2026-04",
+                "DscBandeiraTarifaria": "Verde",
+            },
+        ],
+        reference_date=date(2026, 4, 28),
+    )
+
+    assert result["bandeira"] == "Verde"
+    assert result["competencia"] == "2026-04-01"
+    assert result["vigencia_inicio"] == "2026-04-01"
+    assert result["vigencia_fim"] == "2026-04-30"
+    assert result["periodo_vigencia"] == "2026-04-01 a 2026-04-30"
+
+
+def test_fetch_bandeira_metadata_includes_vigencia_period():
+    session = _FakeSession(
+        [
+            _FakeResponse(
+                payload={
+                    "success": True,
+                    "result": {
+                        "records": [
+                            {
+                                "DatCompetencia": "2026-04",
+                                "DscBandeiraTarifaria": "Verde",
+                            }
+                        ]
+                    },
+                }
+            )
+        ]
+    )
+    client = AneelClient(session=session)
+
+    parsed, metadata = asyncio.run(
+        client.fetch_bandeira(
+            priority_method="datastore_search",
+            reference_date=date(2026, 4, 28),
+        )
+    )
+
+    assert parsed["vigencia_inicio"] == "2026-04-01"
+    assert parsed["vigencia_fim"] == "2026-04-30"
+    assert parsed["periodo_vigencia"] == "2026-04-01 a 2026-04-30"
+    assert metadata.vigencia_inicio == "2026-04-01"
+    assert metadata.vigencia_fim == "2026-04-30"
+    assert metadata.periodo_vigencia == "2026-04-01 a 2026-04-30"
+
+
 def test_csv_fallback_uses_extended_timeout_and_filters_streamed_chunks():
     csv_chunks = [
         b"SigAgente,Nome,Valor\nCPFL-PIR",

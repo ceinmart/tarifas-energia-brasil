@@ -26,6 +26,7 @@ class MetadadosColeta:
     confianca_fonte: str | None = None
     vigencia_inicio: str | None = None
     vigencia_fim: str | None = None
+    periodo_vigencia: str | None = None
 
     def como_atributos(self) -> dict[str, Any]:
         """Converte os metadados para atributos sem valores nulos."""

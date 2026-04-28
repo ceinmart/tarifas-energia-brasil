@@ -13,7 +13,7 @@ import logging
 import time
 import unicodedata
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import aiohttp
@@ -266,6 +266,9 @@ class AneelClient:
                     usou_fallback=attempts > 1,
                     tentativas=attempts,
                     confianca_fonte=ATTR_CONFIANCA_ALTA if attempts == 1 else ATTR_CONFIANCA_MEDIA,
+                    vigencia_inicio=vigencia.get("vigencia_inicio"),
+                    vigencia_fim=vigencia.get("vigencia_fim"),
+                    periodo_vigencia=vigencia.get("periodo_vigencia"),
                 )
                 self._log_aneel_method_success(
                     dataset="bandeiras-tarifarias",
@@ -276,6 +279,9 @@ class AneelClient:
                 return {
                     "bandeira": vigencia["bandeira"],
                     "competencia": vigencia["competencia"],
+                    "vigencia_inicio": vigencia["vigencia_inicio"],
+                    "vigencia_fim": vigencia["vigencia_fim"],
+                    "periodo_vigencia": vigencia["periodo_vigencia"],
                     "adicional_r_kwh": adicional_r_kwh,
                 }, metadata
             except (AneelClientError, aiohttp.ClientError, TimeoutError, ValueError) as err:
@@ -923,7 +929,14 @@ class AneelClient:
                 best_row = row
 
         if best_row is None:
-            return {"bandeira": "Verde", "competencia": reference_date.isoformat()}
+            start, end = _month_period(reference_date)
+            return {
+                "bandeira": "Verde",
+                "competencia": reference_date.isoformat(),
+                "vigencia_inicio": start.isoformat(),
+                "vigencia_fim": end.isoformat(),
+                "periodo_vigencia": _format_periodo_vigencia(start, end),
+            }
 
         bandeira = (
             self._pick(best_row, "DscBandeiraTarifaria")
@@ -931,9 +944,27 @@ class AneelClient:
             or self._pick(best_row, "Bandeira")
             or "Verde"
         )
+        vigencia_inicio = _parse_any_date(
+            self._pick_first(
+                best_row,
+                "DatInicioVigencia",
+                "DatCompetencia",
+                "DatReferencia",
+                "MesAno",
+                "AnoMes",
+            )
+        ) or (best_date or reference_date)
+        vigencia_fim = _parse_any_date(
+            self._pick_first(best_row, "DatFimVigencia", "DatFinalVigencia")
+        )
+        if vigencia_fim is None:
+            _, vigencia_fim = _month_period(vigencia_inicio)
         return {
             "bandeira": str(bandeira).strip(),
             "competencia": (best_date or reference_date).isoformat(),
+            "vigencia_inicio": vigencia_inicio.isoformat(),
+            "vigencia_fim": vigencia_fim.isoformat(),
+            "periodo_vigencia": _format_periodo_vigencia(vigencia_inicio, vigencia_fim),
         }
 
     def _pick_bandeira_adicional(
@@ -1214,6 +1245,23 @@ def _parse_any_date(value: Any) -> date | None:
             except ValueError:
                 continue
     return None
+
+
+def _month_period(value: date) -> tuple[date, date]:
+    """Retorna primeiro e ultimo dia do mes da data informada."""
+
+    start = date(value.year, value.month, 1)
+    if value.month == 12:
+        next_month = date(value.year + 1, 1, 1)
+    else:
+        next_month = date(value.year, value.month + 1, 1)
+    return start, next_month - timedelta(days=1)
+
+
+def _format_periodo_vigencia(start: date, end: date) -> str:
+    """Formata periodo de vigencia para atributo de entidade."""
+
+    return f"{start.isoformat()} a {end.isoformat()}"
 
 
 def _is_within_range(reference: date, start: date | None, end: date | None) -> bool:
