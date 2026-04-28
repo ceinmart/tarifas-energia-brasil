@@ -6,13 +6,10 @@
 
 ### Corrigido
 
-- Sensores passam a usar restauracao nativa do Home Assistant (`RestoreSensor`) para manter o ultimo valor conhecido quando o coordinator ainda nao tem snapshot valido apos o restart.
-- A disponibilidade dos sensores passa a considerar snapshot atual ou valor restaurado, evitando que uma falha inicial temporaria da ANEEL deixe entidades previamente populadas como indisponiveis.
+- Quando a primeira coleta externa falhava apos o restart, sensores que ja tinham dados podiam ficar indisponiveis porque o coordinator ainda nao tinha snapshot valido e as entidades seguiam apenas o estado de sucesso da ultima atualizacao.
+- Sensores passam a usar restauracao nativa do Home Assistant (`RestoreSensor`) para manter o ultimo valor conhecido enquanto a coleta externa tenta atualizar em background.
+- A disponibilidade dos sensores passa a considerar snapshot atual ou valor restaurado.
 - O snapshot persistido pelo coordinator passa a ser agendado depois que o resultado calculado e aplicado em `self.data`, evitando salvar `last_snapshot` vazio apos coleta bem-sucedida.
-
-### Testes
-
-- Cobertura adicionada para restauracao de estado numerico e textual quando a primeira coleta externa falha.
 
 ## 0.1.7 - 2026-04-28
 
@@ -56,20 +53,12 @@
 
 - Logs do fallback CSV passam a indicar inicio do download, tamanho informado pelo servidor, progresso em bytes, fim do stream, linhas lidas e quantidade de registros filtrados.
 
-### Testes
-
-- Cobertura adicionada para garantir que a coleta CSV de Fio B para no primeiro recurso valido e nao baixa recursos antigos desnecessarios.
-
 ## 0.1.4 - 2026-04-27
 
 ### Alterado
 
 - Logs da coleta ANEEL passam a informar quando um fallback foi acionado, qual metodo falhou, qual sera o proximo metodo, quais filtros foram usados e o tipo/mensagem da excecao.
 - Falhas de coleta no coordinator passam a registrar se existe snapshot valido sendo mantido, ou se nao ha cache disponivel, junto com a previsao da proxima tentativa automatica.
-
-### Testes
-
-- Cobertura adicionada para garantir que logs de falha ANEEL incluem filtros e tipo de excecao mesmo quando o erro vem sem mensagem textual.
 
 ## 0.1.3 - 2026-04-27
 
@@ -78,20 +67,12 @@
 - A integracao passa a restaurar o ultimo snapshot valido salvo no Home Assistant durante o setup, mantendo sensores com os dados anteriores quando a coleta externa inicial falhar.
 - O fallback CSV da ANEEL passa a detectar delimitador `;`/`,` e decodificar o arquivo em streaming com encoding compativel com os CSVs publicados, corrigindo a coleta de Fio B da CPFL-PIRATINING quando o datastore CKAN nao retorna registros.
 
-### Testes
-
-- Cobertura adicionada para restauracao de snapshot apos reinicio, CSV ANEEL com delimitador `;` e encoding latin-1, e linhas vigentes de Fio B da CPFL-PIRATINING.
-
 ## 0.1.2 - 2026-04-27
 
 ### Corrigido
 
 - O setup da integracao deixa de bloquear aguardando a primeira coleta externa completa, evitando cancelamento pelo timeout global de bootstrap do Home Assistant quando a ANEEL ou o fallback CSV estiverem lentos.
 - A primeira atualizacao passa a ser agendada em background; se falhar ou for cancelada, a integracao permanece carregada e novas tentativas ocorrem pelos ciclos normais do coordinator.
-
-### Testes
-
-- Cobertura adicionada para garantir que o setup agenda a primeira atualizacao sem chamar `async_config_entry_first_refresh()` de forma bloqueante.
 
 ## 0.1.1 - 2026-04-26
 
@@ -105,10 +86,6 @@
 - A previsao de creditos SCEE agora considera a disponibilidade minima depois da compensacao: `credito_disponibilidade = max(disponibilidade_minima_kwh - energia_nao_compensada, 0)`.
 - O credito de disponibilidade foi separado do credito de energia para nao contaminar o calculo de auto-consumo quando a integracao opera sem entidade de injecao.
 
-### Testes
-
-- Cobertura adicionada para creditos de disponibilidade apos compensacao, consumo nao compensado no SCEE e ICMS com minimo trifasico.
-
 ## 0.1.0 - 2026-04-26
 
 ### Alterado
@@ -120,10 +97,6 @@
 - Leituras temporariamente indisponiveis (`unknown`, `unavailable` ou ausentes) das entidades acumuladas deixam de ser convertidas para `0.0`, evitando falso reset no boot do Home Assistant.
 - O consumo, geracao e injecao mantem a ultima referencia valida quando uma entidade ainda nao carregou, impedindo que a proxima leitura real entre como delta integral e contamine os calculos diario/mensal.
 
-### Testes
-
-- Cobertura adicionada para garantir que uma leitura indisponivel no startup nao altera a referencia incremental nem os acumuladores atuais.
-
 ## 0.1.0-alpha.10 - 2026-04-25
 
 ### Corrigido
@@ -132,10 +105,6 @@
 - No inicio do ciclo, quando a faixa atual de ICMS ainda for `0%`, a expressao do sensor `Fio B final` passa a refletir `0%` no consumo e na compensacao.
 - O sensor `ICMS` passa a expor atributos com a expressao textual da regra aplicada, consumo mensal apurado e faixas da concessionaria.
 
-### Testes
-
-- Cobertura adicionada para manter o custo efetivo do Fio B dentro da faixa atual de ICMS e para explicar a regra de ICMS por concessionaria.
-
 ## 0.1.0-alpha.9 - 2026-04-25
 
 ### Alterado
@@ -143,10 +112,6 @@
 - `Fio B final` passa a representar o custo efetivo da compensacao de energia, calculado como TUSD de consumo final menos TUSD injetada creditada final.
 - O calculo do custo efetivo do Fio B passa a usar ICMS de referencia da faixa residencial cheia para consumo e ICMS zero para compensacao, evitando que o inicio do ciclo mensal subestime o custo.
 - O sensor `Fio B final` passa a expor atributos com a expressao textual do calculo e os valores usados.
-
-### Testes
-
-- Cobertura adicionada para o custo efetivo de compensacao e para a selecao do ICMS de referencia por concessionaria.
 
 ## 0.1.0-alpha.8 - 2026-04-25
 
@@ -161,12 +126,6 @@
 - Coleta ANEEL via CSV passa a filtrar registros em streaming e usar timeouts maiores para fontes lentas.
 - Coleta de tributos passa a usar timeout HTTP maior.
 
-### Testes
-
-- Cobertura adicionada para disponibilidade mensal versus quebras diaria/semanal.
-- Cobertura adicionada para as novas entidades mensais sem disponibilidade.
-- Cobertura adicionada para timeouts e parsing em streaming da coleta ANEEL/tributos.
-
 ## 0.1.0-alpha.7 - 2026-04-25
 
 ### Corrigido
@@ -175,10 +134,6 @@
 - Ciclo mensal com dia de leitura configurado, como dia `24`, passa a fechar corretamente na virada do dia anterior para o dia configurado.
 - Updates dinamicos das entidades agora recalculam ICMS por faixa usando o consumo mensal apurado como base.
 - Tarifas finais e Fio B passam a ser recalculados quando a faixa de ICMS muda durante o ciclo, corrigindo os valores de conta regular e conta com geracao.
-
-### Testes
-
-- Cobertura adicionada para virada diaria/mensal no dia de leitura, virada semanal e recalculo de ICMS por consumo mensal.
 
 ## 0.1.0-alpha.6 - 2026-04-24
 
@@ -208,20 +163,12 @@
 
 - Adicionada documentacao tecnica gerada a partir do codigo para o pre-release `0.1.0-alpha.5`, com fluxo de funcionamento, objetos principais, funcoes de calculo e criterios de teste.
 
-### Testes
-
-- Cobertura adicionada para reset sem contaminacao dos acumuladores, Tarifa Branca apos rebase e calculo de auto-consumo por energia gerada menos energia injetada.
-
 ## 0.1.0-alpha.4 - 2026-04-24
 
 ### Corrigido
 
 - Listener de mudanca das entidades de consumo/geracao agora roda no event loop do Home Assistant, evitando o erro frequente de thread safety ao atualizar sensores via `async_update_listeners()`.
 - Apuracao temporal da Tarifa Branca passou a respeitar o fuso horario da leitura recebida antes de classificar os intervalos.
-
-### Testes
-
-- Stub de testes do coordinator atualizado para cobrir o decorador `callback` do Home Assistant.
 
 ## 0.1.0-alpha.3 - 2026-04-23
 
@@ -231,13 +178,6 @@
 - Acumuladores da Tarifa Branca passaram a reclassificar a leitura de reset no posto tarifario atual, marcando baixa confianca quando houver necessidade de estimativa.
 - Diagnosticos passaram a refletir melhor o estado corrente dos acumuladores mensais de consumo e geracao, alem do sinalizador efetivo de confianca da Tarifa Branca.
 - Estados numericos publicados nos sensores agora sao exibidos com no maximo 4 casas decimais para melhorar leitura no Home Assistant.
-
-### Testes
-
-- Cobertura adicionada para:
-  - reset de entidades acumuladas preservando o valor corrente do ciclo;
-  - reclassificacao de reset na Tarifa Branca;
-  - arredondamento de exibicao dos sensores para 4 casas decimais.
 
 ## 0.1.0-alpha.2 - 2026-04-23
 
@@ -260,17 +200,6 @@
 - O bootstrap inicial do ICMS passou a usar fallback seguro sem forcar faixa isenta quando ainda nao houver historico de consumo mensal acumulado.
 - Diagnosticos da integracao agora expõem a linha escolhida da ANEEL para tarifas e `Fio B`, alem da origem aplicada do ICMS.
 
-### Testes
-
-- Cobertura adicionada para:
-  - defaults e normalizacao dos grupos no `config_flow/options_flow`;
-  - criacao condicional de sensores por grupo;
-  - estabilidade de `unique_id` e `device_info` no modelo de um unico device.
-  - horarios, feriados e rateio temporal da Tarifa Branca;
-  - calculo monetario da Tarifa Branca por posto.
-  - selecao correta das linhas da ANEEL para `CPFL-PIRATINING`;
-  - uso de `NumberSelector` em modo caixa para os campos numericos do `config_flow`.
-
 ## 0.1.0-alpha.1-base-integracao - 2026-04-22
 
 ### Adicionado
@@ -288,46 +217,8 @@
   - `CPFL-PAULISTA`
   - `CELESC`
 - Sensores principais de componentes, tributos, Fio B, bandeira e contas por quebra.
-- Testes iniciais de calculos (`tests/test_calculators.py`).
 - Ledger persistente de creditos SCEE:
   - expiracao em 60 meses;
   - consumo de credito mais antigo primeiro;
   - persistencia em storage local por `entry_id`.
-- Parser de tributos desacoplado para testes por fixture:
-  - `custom_components/tarifas_energia_brasil/tributos/parsers.py`
-  - `tests/test_tributos_parsers.py`
-  - `tests/test_credito_ledger.py`
-- Testes de fluxo:
-  - validacao de `config_flow` e `options_flow` em `tests/test_config_flow.py`
-- Extratores internos adicionais (mantidos fora do fluxo de suporte):
-  - `RGE SUL` (parcial)
-  - `CEMIG-D` (parcial)
-- Regra de ICMS por faixa de consumo mensal:
-  - novo modulo `icms_rules.py`;
-  - aplicacao automatica no `coordinator` com fallback para aliquota base;
-  - cobertura de testes em `tests/test_icms_rules.py`.
-- Workflows CI:
-  - `hacs.yaml`
-  - `hassfest.yaml`
-  - `ci.yaml`
-
-### Concessionarias
-
-- Suportadas nesta versao:
-  - `CPFL-PIRATINING`
-  - `CPFL-PAULISTA`
-  - `CELESC`
-- Mapeadas mas nao suportadas no fluxo:
-  - `RGE SUL`
-  - `CEMIG-D`
-  - `ENEL SP`
-
-### Limitacoes conhecidas
-
-- Estimativa de tarifa branca por periodo sem consumo horario por posto.
-- Modelo SCEE inicial (sem persistencia completa historica de creditos).
-- Dependencia de layout web para extracao de tributos.
-
-### Breaking changes
-
-- Nao aplicavel (primeira pre-release).
+- Parser de tributos desacoplado para reutilizacao pelos extratores.\r\n
