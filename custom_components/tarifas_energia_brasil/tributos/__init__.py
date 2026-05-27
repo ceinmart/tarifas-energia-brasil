@@ -74,6 +74,16 @@ _TRIBUTOS_FALLBACK: Final[dict[str, TributosFallback]] = {
         confianca=ATTR_CONFIANCA_MEDIA,
         pendencias=("ICMS aberto por faixa ainda pendente de validacao oficial.",),
     ),
+    "LIGHT-RJ": TributosFallback(
+        pis=1.10,
+        cofins=5.02,
+        icms=20.00,
+        fonte="https://www.light.com.br/para-residencias/Sua-Conta/composicao-da-tarifa.aspx",
+        confianca=ATTR_CONFIANCA_MEDIA,
+        pendencias=(
+            "Parser HTML LIGHT-RJ pendente; ICMS resolvido por faixa em icms_rules.py.",
+        ),
+    ),
 }
 
 
