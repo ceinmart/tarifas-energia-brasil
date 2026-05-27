@@ -5,6 +5,7 @@
 - CPFL-PIRATINING
 - CPFL-PAULISTA
 - CELESC
+- LIGHT-RJ (fallback; parser HTML pendente)
 
 ## Mapeadas, fora do fluxo de configuracao
 

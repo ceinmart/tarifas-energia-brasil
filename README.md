@@ -89,6 +89,7 @@ Suportadas no fluxo de configuracao:
 - `CPFL-PIRATINING`
 - `CPFL-PAULISTA`
 - `CELESC`
+- `LIGHT-RJ`
 
 Mapeadas mas ainda nao suportadas no fluxo:
 
@@ -115,6 +116,7 @@ Links de concessionarias usados para tributos (MVP atual):
 - [CPFL Piratininga - PIS/COFINS](https://www.cpfl.com.br/piratininga/pis-cofins)
 - [CPFL Paulista - PIS/COFINS](https://www.cpfl.com.br/paulista/pis-cofins)
 - [Celesc - Tarifas e tributos](https://www.celesc.com.br/tarifas-de-energia)
+- [Light - Composicao da tarifa](https://www.light.com.br/para-residencias/Sua-Conta/composicao-da-tarifa.aspx)
 
 ## REGRAS SCEE
 
