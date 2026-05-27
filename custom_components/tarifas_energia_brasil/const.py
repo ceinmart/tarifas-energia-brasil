@@ -116,6 +116,14 @@ CONCESSIONARIAS_SUPORTADAS: Mapping[str, ConcessionariaInfo] = {
         confianca=ATTR_CONFIANCA_ALTA,
         observacao="Candidata inicial com extracao validada.",
     ),
+    "LIGHT-RJ": ConcessionariaInfo(
+        slug="light_rj",
+        nome="LIGHT-RJ",
+        suportada=True,
+        extrator_tributos="light_rj",
+        confianca=ATTR_CONFIANCA_MEDIA,
+        observacao="MVP LIGHT-RJ: fallback aplicado ate parser oficial.",
+    ),
     "RGE SUL": ConcessionariaInfo(
         slug="rge_sul",
         nome="RGE SUL",
