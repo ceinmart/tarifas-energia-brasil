@@ -184,6 +184,7 @@ TarifasEnergiaBrasilConfigFlow = config_flow_module.TarifasEnergiaBrasilConfigFl
 TarifasEnergiaBrasilOptionsFlow = config_flow_module.TarifasEnergiaBrasilOptionsFlow
 CONF_CONCESSIONARIA = const_module.CONF_CONCESSIONARIA
 CONF_ENTIDADE_CONSUMO = const_module.CONF_ENTIDADE_CONSUMO
+CONF_HABILITAR_ATRIBUTOS_EXTRAS = const_module.CONF_HABILITAR_ATRIBUTOS_EXTRAS
 CONF_HABILITAR_GRUPO_GERACAO = const_module.CONF_HABILITAR_GRUPO_GERACAO
 CONF_HABILITAR_GRUPO_TARIFA_BRANCA = const_module.CONF_HABILITAR_GRUPO_TARIFA_BRANCA
 CONF_ENTIDADE_GERACAO = const_module.CONF_ENTIDADE_GERACAO
@@ -191,6 +192,12 @@ CONF_ENTIDADE_INJECAO = const_module.CONF_ENTIDADE_INJECAO
 CONF_DIA_LEITURA = const_module.CONF_DIA_LEITURA
 CONF_TIPO_FORNECIMENTO = const_module.CONF_TIPO_FORNECIMENTO
 CONF_HORAS_ATUALIZACAO = const_module.CONF_HORAS_ATUALIZACAO
+CONF_METODO_ANEEL = const_module.CONF_METODO_ANEEL
+CONF_MULTIPLICADOR_FALLBACK_CSV = const_module.CONF_MULTIPLICADOR_FALLBACK_CSV
+METODO_ANEEL_BUSCA_DADOS = const_module.METODO_ANEEL_BUSCA_DADOS
+METODO_ANEEL_BUSCA_DADOS_SQL = const_module.METODO_ANEEL_BUSCA_DADOS_SQL
+METODOS_ANEEL_SUPORTADOS = const_module.METODOS_ANEEL_SUPORTADOS
+MULTIPLICADOR_FALLBACK_CSV_PADRAO = const_module.MULTIPLICADOR_FALLBACK_CSV_PADRAO
 
 
 def test_config_flow_show_form_initial():
@@ -239,6 +246,8 @@ def test_config_flow_create_entry_success():
     assert result["data"][CONF_TIPO_FORNECIMENTO] == "monofasico"
     assert result["data"][CONF_HABILITAR_GRUPO_GERACAO] is True
     assert result["data"][CONF_HABILITAR_GRUPO_TARIFA_BRANCA] is False
+    assert result["data"][CONF_HABILITAR_ATRIBUTOS_EXTRAS] is False
+    assert result["data"][CONF_MULTIPLICADOR_FALLBACK_CSV] == MULTIPLICADOR_FALLBACK_CSV_PADRAO
 
 
 def test_options_flow_requires_tipo_fornecimento_when_generation_set():
@@ -327,3 +336,29 @@ def test_config_flow_uses_number_box_for_reading_day_and_update_hours():
     assert fields[CONF_DIA_LEITURA].config.mode == number_mode.BOX
     assert isinstance(fields[CONF_HORAS_ATUALIZACAO], number_selector)
     assert fields[CONF_HORAS_ATUALIZACAO].config.mode == number_mode.BOX
+    assert isinstance(fields[CONF_MULTIPLICADOR_FALLBACK_CSV], number_selector)
+    assert fields[CONF_MULTIPLICADOR_FALLBACK_CSV].config.mode == number_mode.BOX
+    assert fields[CONF_MULTIPLICADOR_FALLBACK_CSV].config.min == 1
+    assert fields[CONF_MULTIPLICADOR_FALLBACK_CSV].config.max == 30
+
+
+def test_config_flow_does_not_offer_legacy_sql_method():
+    schema = TarifasEnergiaBrasilConfigFlow._build_schema()
+    fields = {marker.schema: field for marker, field in schema.schema.items()}
+
+    assert METODO_ANEEL_BUSCA_DADOS_SQL not in METODOS_ANEEL_SUPORTADOS
+    assert fields[CONF_METODO_ANEEL].config.options == list(METODOS_ANEEL_SUPORTADOS)
+
+
+def test_config_flow_normalizes_legacy_sql_method_to_datastore_search():
+    flow = TarifasEnergiaBrasilConfigFlow()
+    user_input = {
+        CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+        CONF_ENTIDADE_CONSUMO: "sensor.consumo_total",
+        CONF_METODO_ANEEL: METODO_ANEEL_BUSCA_DADOS_SQL,
+    }
+
+    result = asyncio.run(flow.async_step_user(user_input))
+
+    assert result["type"] == "create_entry"
+    assert result["data"][CONF_METODO_ANEEL] == METODO_ANEEL_BUSCA_DADOS

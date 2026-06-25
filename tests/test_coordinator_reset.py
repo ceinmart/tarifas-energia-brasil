@@ -190,6 +190,8 @@ QUEBRA_MENSAL = const_module.QUEBRA_MENSAL
 QUEBRA_DIARIA = const_module.QUEBRA_DIARIA
 QUEBRA_SEMANAL = const_module.QUEBRA_SEMANAL
 CONF_CONCESSIONARIA = const_module.CONF_CONCESSIONARIA
+CONF_HORAS_ATUALIZACAO = const_module.CONF_HORAS_ATUALIZACAO
+CONF_MULTIPLICADOR_FALLBACK_CSV = const_module.CONF_MULTIPLICADOR_FALLBACK_CSV
 resolve_tarifa_branca_schedule = tarifa_branca_module.resolve_tarifa_branca_schedule
 MetadadosColeta = coordinator_module.MetadadosColeta
 ResultadoCalculo = coordinator_module.ResultadoCalculo
@@ -256,6 +258,90 @@ def test_success_restores_regular_interval_after_initial_retry():
     coordinator._restore_regular_update_interval()
 
     assert coordinator.update_interval == timedelta(hours=24)
+
+
+def test_csv_fallback_multiplier_turns_regular_interval_into_block_window():
+    coordinator = _build_coordinator()
+    coordinator.entry = types.SimpleNamespace(
+        data={
+            CONF_HORAS_ATUALIZACAO: 24,
+            CONF_MULTIPLICADOR_FALLBACK_CSV: 3,
+        },
+        options={},
+    )
+
+    assert coordinator._csv_fallback_interval() == timedelta(hours=72)
+
+
+def test_csv_fallback_is_allowed_without_cached_snapshot():
+    coordinator = _build_coordinator()
+    now = datetime(2026, 4, 27, 10, 0, tzinfo=UTC)
+    coordinator.entry = types.SimpleNamespace(
+        data={
+            CONF_HORAS_ATUALIZACAO: 24,
+            CONF_MULTIPLICADOR_FALLBACK_CSV: 3,
+        },
+        options={},
+    )
+    coordinator.data = None
+    coordinator._last_csv_fallback_attempts = {"fio_b": now.isoformat()}
+
+    assert coordinator._csv_fallback_allowed("fio_b", now) is True
+
+
+def test_csv_fallback_is_blocked_inside_multiplier_window_with_snapshot():
+    coordinator = _build_coordinator()
+    now = datetime(2026, 4, 27, 10, 0, tzinfo=UTC)
+    coordinator.entry = types.SimpleNamespace(
+        data={
+            CONF_HORAS_ATUALIZACAO: 24,
+            CONF_MULTIPLICADOR_FALLBACK_CSV: 3,
+        },
+        options={},
+    )
+    coordinator.data = ResultadoCalculo(
+        atualizado_em=now,
+        concessionaria="CPFL-PIRATINING",
+        valores={"tarifa_convencional_final_r_kwh": 0.9748},
+        coletas_por_chave={},
+        diagnosticos={},
+    )
+    coordinator._last_csv_fallback_attempts = {
+        "fio_b": (now - timedelta(hours=71, minutes=59)).isoformat()
+    }
+
+    assert coordinator._csv_fallback_allowed("fio_b", now) is False
+    diagnostics = coordinator._csv_fallback_diagnostics(now)
+    assert diagnostics["fio_b"]["permitido"] is False
+    assert diagnostics["fio_b"]["intervalo_horas"] == pytest.approx(72)
+
+
+def test_csv_fallback_attempts_are_persisted_in_state_snapshot():
+    coordinator = _build_coordinator()
+    coordinator.data = None
+    coordinator._last_consumo_total_kwh = None
+    coordinator._last_geracao_total_kwh = None
+    coordinator._last_injecao_total_kwh = None
+    coordinator._last_consumo_timestamp = None
+    coordinator._last_geracao_timestamp = None
+    coordinator._last_injecao_timestamp = None
+    coordinator._consumo_period_state = TarifasEnergiaBrasilCoordinator._new_period_state()
+    coordinator._geracao_period_state = TarifasEnergiaBrasilCoordinator._new_period_state()
+    coordinator._injecao_period_state = TarifasEnergiaBrasilCoordinator._new_period_state()
+    coordinator._consumo_tarifa_branca_state = (
+        TarifasEnergiaBrasilCoordinator._new_posto_period_state()
+    )
+    coordinator._ultimo_ciclo_mensal = None
+    coordinator._credito_estimado_atual_kwh = 0.0
+    coordinator._credito_consumido_estimado_atual_kwh = 0.0
+    coordinator._creditos_ledger = []
+    coordinator._last_csv_fallback_attempts = {"tarifas": "2026-04-27T10:00:00+00:00"}
+
+    payload = coordinator._serialize_state()
+
+    assert payload["last_csv_fallback_attempts"] == {
+        "tarifas": "2026-04-27T10:00:00+00:00"
+    }
 
 
 def test_cached_snapshot_roundtrip_restores_sensor_valores_after_restart():

@@ -39,6 +39,7 @@ from .const import (
     CONF_ENTIDADE_INJECAO,
     CONF_HORAS_ATUALIZACAO,
     CONF_METODO_ANEEL,
+    CONF_MULTIPLICADOR_FALLBACK_CSV,
     CONF_QUEBRAS_CALCULO,
     CONF_TB_FERIADOS_EXTRAS,
     CONF_TIPO_FORNECIMENTO,
@@ -47,11 +48,13 @@ from .const import (
     FORNECIMENTO_MONOFASICO,
     HORAS_ATUALIZACAO_PADRAO,
     METODO_ANEEL_PADRAO,
+    MULTIPLICADOR_FALLBACK_CSV_PADRAO,
     QUEBRA_DIARIA,
     QUEBRA_MENSAL,
     QUEBRA_SEMANAL,
     QUEBRAS_PADRAO,
     QUEBRAS_VALIDAS,
+    multiplicador_fallback_csv,
 )
 from .credito_ledger import (
     CreditoEntry,
@@ -121,6 +124,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
         self._tarifa_branca_schedule_source = "desconhecido"
         self._tarifa_branca_invalid_extra_holidays: list[str] = []
         self._unsub_state_listeners: list[Any] = []
+        self._last_csv_fallback_attempts: dict[str, str] = {}
 
         self._configured_update_interval = timedelta(hours=self._effective_update_hours())
 
@@ -211,6 +215,13 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
                 0.0,
             )
             self._creditos_ledger = deserialize_entries(payload.get("creditos_ledger"))
+            raw_csv_attempts = payload.get("last_csv_fallback_attempts")
+            if isinstance(raw_csv_attempts, dict):
+                self._last_csv_fallback_attempts = {
+                    str(key): str(value)
+                    for key, value in raw_csv_attempts.items()
+                    if isinstance(value, str)
+                }
             cached_snapshot = self._restore_cached_snapshot(payload.get("last_snapshot"))
             if cached_snapshot is not None:
                 self.data = cached_snapshot
@@ -256,6 +267,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
             "credito_estimado_atual_kwh": self._credito_estimado_atual_kwh,
             "credito_consumido_estimado_atual_kwh": self._credito_consumido_estimado_atual_kwh,
             "creditos_ledger": serialize_entries(self._creditos_ledger),
+            "last_csv_fallback_attempts": self._last_csv_fallback_attempts,
             "last_snapshot": self._serialize_cached_snapshot(),
         }
 
@@ -1269,21 +1281,28 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
         injecao_entity = self._effective_value(CONF_ENTIDADE_INJECAO)
         tipo_fornecimento = self._effective_value(CONF_TIPO_FORNECIMENTO, FORNECIMENTO_MONOFASICO)
         possuia_historico_consumo = self._last_consumo_timestamp is not None
+        csv_allowed_by_dataset = self._csv_fallback_allowed_by_dataset(now)
 
         try:
             tarifas_task = self._aneel_client.fetch_tarifas(
                 concessionaria=concessionaria,
                 priority_method=prioridade,
                 reference_date=referencia,
+                csv_fallback_allowed=csv_allowed_by_dataset["tarifas"],
+                csv_fallback_attempt_callback=self._mark_csv_fallback_attempt,
             )
             fio_b_task = self._aneel_client.fetch_fio_b(
                 concessionaria=concessionaria,
                 priority_method=prioridade,
                 reference_date=referencia,
+                csv_fallback_allowed=csv_allowed_by_dataset["fio_b"],
+                csv_fallback_attempt_callback=self._mark_csv_fallback_attempt,
             )
             bandeira_task = self._aneel_client.fetch_bandeira(
                 priority_method=prioridade,
                 reference_date=referencia,
+                csv_fallback_allowed=csv_allowed_by_dataset["bandeira"],
+                csv_fallback_attempt_callback=self._mark_csv_fallback_attempt,
             )
             tributos_task = extract_tributos(
                 session=async_get_clientsession(self.hass),
@@ -1326,6 +1345,9 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
                 diagnosticos["mensagem_erro"] = str(err)
                 diagnosticos["ultima_falha"] = now.isoformat()
                 diagnosticos["usou_ultimo_valor_valido"] = True
+                diagnosticos["csv_fallback_bloqueios"] = self._csv_fallback_diagnostics(now)
+                self._log_csv_fallback_blocks(csv_allowed_by_dataset, now)
+                self._schedule_state_save()
                 return ResultadoCalculo(
                     atualizado_em=now,
                     concessionaria=self.data.concessionaria,
@@ -1344,6 +1366,8 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
                 retry_interval,
                 err,
             )
+            self._log_csv_fallback_blocks(csv_allowed_by_dataset, now)
+            self._schedule_state_save()
             raise UpdateFailed(f"Falha na coleta inicial: {err}") from err
 
         self._restore_regular_update_interval()
@@ -1529,6 +1553,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
             "icms_source": icms_source,
             "tarifas_selection_debug": tarifas_data.get("selection_debug"),
             "fio_b_selection_debug": fio_b_data.get("selection_debug"),
+            "csv_fallback_bloqueios": self._csv_fallback_diagnostics(now),
             "saldo_creditos_disponiveis_kwh": saldo_creditos_disponiveis,
             "credito_consumido_estimado_atual_kwh": self._credito_consumido_estimado_atual_kwh,
             "credito_gerado_estimado_atual_kwh": self._credito_estimado_atual_kwh,
@@ -1555,6 +1580,90 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
             return max(int(value), 1)
         except (TypeError, ValueError):
             return HORAS_ATUALIZACAO_PADRAO
+
+    def _effective_csv_multiplier(self) -> int:
+        """Retorna multiplicador efetivo da cadencia do fallback CSV."""
+
+        config = {
+            CONF_MULTIPLICADOR_FALLBACK_CSV: self._effective_value(
+                CONF_MULTIPLICADOR_FALLBACK_CSV,
+                MULTIPLICADOR_FALLBACK_CSV_PADRAO,
+            )
+        }
+        return multiplicador_fallback_csv(config)
+
+    def _csv_fallback_interval(self) -> timedelta:
+        """Retorna intervalo minimo entre tentativas CSV por dataset."""
+
+        return timedelta(hours=self._effective_update_hours() * self._effective_csv_multiplier())
+
+    def _csv_fallback_allowed_by_dataset(self, now: datetime) -> dict[str, bool]:
+        """Resolve se cada dataset pode acionar CSV neste ciclo."""
+
+        return {
+            dataset_key: self._csv_fallback_allowed(dataset_key, now)
+            for dataset_key in ("tarifas", "fio_b", "bandeira")
+        }
+
+    def _csv_fallback_allowed(self, dataset_key: str, now: datetime) -> bool:
+        """Permite CSV no primeiro carregamento ou apos a janela configurada."""
+
+        if self.data is None:
+            return True
+        last_attempt = self._last_csv_attempt_datetime(dataset_key)
+        if last_attempt is None:
+            return True
+        return now - last_attempt >= self._csv_fallback_interval()
+
+    def _last_csv_attempt_datetime(self, dataset_key: str) -> datetime | None:
+        """Le a ultima tentativa CSV de um dataset."""
+
+        raw = self._last_csv_fallback_attempts.get(dataset_key)
+        if raw is None:
+            return None
+        return self._as_datetime_or_none(raw)
+
+    def _mark_csv_fallback_attempt(self, dataset_key: str) -> None:
+        """Registra tentativa CSV para persistencia posterior."""
+
+        self._last_csv_fallback_attempts[dataset_key] = datetime.now().astimezone().isoformat()
+
+    def _csv_fallback_diagnostics(self, now: datetime) -> dict[str, dict[str, Any]]:
+        """Monta diagnostico compacto da cadencia CSV."""
+
+        interval = self._csv_fallback_interval()
+        diagnostics: dict[str, dict[str, Any]] = {}
+        for dataset_key in ("tarifas", "fio_b", "bandeira"):
+            last_attempt = self._last_csv_attempt_datetime(dataset_key)
+            next_allowed = last_attempt + interval if last_attempt is not None else None
+            diagnostics[dataset_key] = {
+                "permitido": self._csv_fallback_allowed(dataset_key, now),
+                "ultima_tentativa": last_attempt.isoformat() if last_attempt is not None else None,
+                "proxima_tentativa": next_allowed.isoformat() if next_allowed is not None else None,
+                "intervalo_horas": interval.total_seconds() / 3600,
+            }
+        return diagnostics
+
+    def _log_csv_fallback_blocks(self, allowed_by_dataset: dict[str, bool], now: datetime) -> None:
+        """Registra quando o CSV esta temporariamente bloqueado."""
+
+        for dataset_key, allowed in allowed_by_dataset.items():
+            if allowed:
+                continue
+            last_attempt = self._last_csv_attempt_datetime(dataset_key)
+            next_allowed = (
+                last_attempt + self._csv_fallback_interval() if last_attempt is not None else None
+            )
+            _LOGGER.warning(
+                (
+                    "ANEEL fallback CSV bloqueado para %s: ultima_tentativa=%s; "
+                    "proxima_tentativa=%s; multiplicador=%s"
+                ),
+                dataset_key,
+                last_attempt.isoformat() if last_attempt is not None else "desconhecida",
+                next_allowed.isoformat() if next_allowed is not None else "agora",
+                self._effective_csv_multiplier(),
+            )
 
     def _failure_retry_interval(self, *, has_snapshot: bool) -> timedelta:
         """Ajusta a proxima tentativa apos falha externa."""

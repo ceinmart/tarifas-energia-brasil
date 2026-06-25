@@ -204,6 +204,7 @@ EntityCategory = sys.modules["homeassistant.helpers.entity"].EntityCategory
 
 CONF_CONCESSIONARIA = const_module.CONF_CONCESSIONARIA
 CONF_ENTIDADE_CONSUMO = const_module.CONF_ENTIDADE_CONSUMO
+CONF_HABILITAR_ATRIBUTOS_EXTRAS = const_module.CONF_HABILITAR_ATRIBUTOS_EXTRAS
 CONF_HABILITAR_GRUPO_GERACAO = const_module.CONF_HABILITAR_GRUPO_GERACAO
 CONF_HABILITAR_GRUPO_TARIFA_BRANCA = const_module.CONF_HABILITAR_GRUPO_TARIFA_BRANCA
 CONF_ENTIDADE_GERACAO = const_module.CONF_ENTIDADE_GERACAO
@@ -381,6 +382,88 @@ def test_numeric_native_value_is_rounded_to_four_decimal_places():
     )
 
     assert entity.native_value == 0.7879
+
+
+def test_extra_state_attributes_are_minimal_by_default():
+    entry = ConfigEntry(
+        data={
+            CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+            CONF_ENTIDADE_CONSUMO: "sensor.consumo_total",
+            CONF_HABILITAR_GRUPO_TARIFA_BRANCA: False,
+        },
+        options={},
+    )
+    description = next(
+        item
+        for item in montar_descricoes_sensores(entry)
+        if item.chave_valor == "tarifa_convencional_final_r_kwh"
+    )
+
+    class DummyMetadata:
+        def como_atributos(self) -> dict:
+            return {"metodo_acesso": "datastore_search", "usou_fallback": False}
+
+    class DummyCoordinator:
+        data = types.SimpleNamespace(
+            valores={"tarifa_convencional_final_r_kwh": 0.7879},
+            concessionaria="CPFL-PIRATINING",
+            atualizado_em=types.SimpleNamespace(isoformat=lambda: "2026-04-23T18:00:00-03:00"),
+            coletas_por_chave={"tarifa_convencional_final_r_kwh": DummyMetadata()},
+            diagnosticos={"prioridade_aneel": "datastore_search", "mensagem_erro": "erro"},
+        )
+
+    entity = TarifasEnergiaBrasilSensor(
+        coordinator=DummyCoordinator(),
+        entry=entry,
+        description=description,
+    )
+
+    assert entity.extra_state_attributes == {
+        "concessionaria": "CPFL-PIRATINING",
+        "ultima_atualizacao": "2026-04-23T18:00:00-03:00",
+    }
+
+
+def test_extra_state_attributes_include_diagnostics_when_enabled():
+    entry = ConfigEntry(
+        data={
+            CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+            CONF_ENTIDADE_CONSUMO: "sensor.consumo_total",
+            CONF_HABILITAR_ATRIBUTOS_EXTRAS: True,
+            CONF_HABILITAR_GRUPO_TARIFA_BRANCA: False,
+        },
+        options={},
+    )
+    description = next(
+        item
+        for item in montar_descricoes_sensores(entry)
+        if item.chave_valor == "tarifa_convencional_final_r_kwh"
+    )
+
+    class DummyMetadata:
+        def como_atributos(self) -> dict:
+            return {"metodo_acesso": "datastore_search", "usou_fallback": False}
+
+    class DummyCoordinator:
+        data = types.SimpleNamespace(
+            valores={"tarifa_convencional_final_r_kwh": 0.7879},
+            concessionaria="CPFL-PIRATINING",
+            atualizado_em=types.SimpleNamespace(isoformat=lambda: "2026-04-23T18:00:00-03:00"),
+            coletas_por_chave={"tarifa_convencional_final_r_kwh": DummyMetadata()},
+            diagnosticos={"prioridade_aneel": "datastore_search", "mensagem_erro": None},
+        )
+
+    entity = TarifasEnergiaBrasilSensor(
+        coordinator=DummyCoordinator(),
+        entry=entry,
+        description=description,
+    )
+
+    attrs = entity.extra_state_attributes
+
+    assert attrs["metodo_acesso"] == "datastore_search"
+    assert attrs["prioridade_aneel"] == "datastore_search"
+    assert attrs["usou_fallback"] is False
 
 
 def test_sensor_restores_previous_numeric_state_when_coordinator_has_no_snapshot():

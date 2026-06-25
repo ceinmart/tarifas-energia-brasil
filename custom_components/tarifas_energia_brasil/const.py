@@ -13,19 +13,21 @@ from homeassistant.const import Platform
 
 DOMAIN = "tarifas_energia_brasil"
 NAME = "Tarifas Energia Brasil"
-VERSION = "0.1.9"
+VERSION = "0.1.10"
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 CONF_CONCESSIONARIA = "concessionaria"
 CONF_DIA_LEITURA = "dia_leitura_reset_mensal"
 CONF_HORAS_ATUALIZACAO = "frequencia_atualizacao_horas"
+CONF_MULTIPLICADOR_FALLBACK_CSV = "multiplicador_fallback_csv"
 CONF_METODO_ANEEL = "meio_prioritario_aneel"
 CONF_ENTIDADE_CONSUMO = "entidade_consumo_kwh"
 CONF_ENTIDADE_GERACAO = "entidade_geracao_kwh"
 CONF_ENTIDADE_INJECAO = "entidade_injecao_kwh"
 CONF_TIPO_FORNECIMENTO = "tipo_fornecimento"
 CONF_QUEBRAS_CALCULO = "quebras_calculo"
+CONF_HABILITAR_ATRIBUTOS_EXTRAS = "habilitar_atributos_extras"
 CONF_HABILITAR_GRUPO_GERACAO = "habilitar_grupo_geracao"
 CONF_HABILITAR_GRUPO_TARIFA_BRANCA = "habilitar_grupo_tarifa_branca"
 CONF_TB_PONTA_INICIO = "tarifa_branca_inicio_ponta"
@@ -59,14 +61,15 @@ METODO_ANEEL_BUSCA_DADOS_SQL = "datastore_search_sql"
 METODO_ANEEL_CSV_XML = "csv_xml"
 METODOS_ANEEL_SUPORTADOS: tuple[str, ...] = (
     METODO_ANEEL_BUSCA_DADOS,
-    METODO_ANEEL_BUSCA_DADOS_SQL,
     METODO_ANEEL_CSV_XML,
 )
 
 DIA_LEITURA_PADRAO = 1
 HORAS_ATUALIZACAO_PADRAO = 24
+MULTIPLICADOR_FALLBACK_CSV_PADRAO = 3
 METODO_ANEEL_PADRAO = METODO_ANEEL_BUSCA_DADOS
 QUEBRAS_PADRAO: list[str] = [QUEBRA_DIARIA, QUEBRA_MENSAL]
+HABILITAR_ATRIBUTOS_EXTRAS_PADRAO = False
 HABILITAR_GRUPO_GERACAO_PADRAO = False
 HABILITAR_GRUPO_TARIFA_BRANCA_PADRAO = False
 
@@ -158,6 +161,14 @@ def obter_ordem_alternativa_metodo_aneel(priority_method: str) -> list[str]:
     return [priority_method, *[m for m in METODOS_ANEEL_SUPORTADOS if m != priority_method]]
 
 
+def normalizar_metodo_aneel(priority_method: object) -> str:
+    """Normaliza metodo ANEEL, incluindo entries antigas com SQL legado."""
+
+    if isinstance(priority_method, str) and priority_method in METODOS_ANEEL_SUPORTADOS:
+        return priority_method
+    return METODO_ANEEL_PADRAO
+
+
 def converter_bool(value: object, default: bool) -> bool:
     """Converte valores comuns para bool de forma tolerante."""
 
@@ -181,6 +192,35 @@ def grupo_geracao_habilitado(config: Mapping[str, object]) -> bool:
             HABILITAR_GRUPO_GERACAO_PADRAO,
         )
     return bool(config.get(CONF_ENTIDADE_GERACAO) or config.get(CONF_ENTIDADE_INJECAO))
+
+
+def atributos_extras_habilitados(config: Mapping[str, object]) -> bool:
+    """Resolve se atributos tecnicos extensos devem ser publicados."""
+
+    return converter_bool(
+        config.get(CONF_HABILITAR_ATRIBUTOS_EXTRAS),
+        HABILITAR_ATRIBUTOS_EXTRAS_PADRAO,
+    )
+
+
+def multiplicador_fallback_csv(config: Mapping[str, object]) -> int:
+    """Resolve multiplicador da cadencia do fallback CSV."""
+
+    try:
+        return min(
+            max(
+                int(
+                    config.get(
+                        CONF_MULTIPLICADOR_FALLBACK_CSV,
+                        MULTIPLICADOR_FALLBACK_CSV_PADRAO,
+                    )
+                ),
+                1,
+            ),
+            30,
+        )
+    except (TypeError, ValueError):
+        return MULTIPLICADOR_FALLBACK_CSV_PADRAO
 
 
 def grupo_tarifa_branca_habilitado(config: Mapping[str, object]) -> bool:

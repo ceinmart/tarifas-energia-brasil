@@ -35,6 +35,7 @@ from .const import (
     QUEBRA_MENSAL,
     QUEBRA_SEMANAL,
     QUEBRAS_PADRAO,
+    atributos_extras_habilitados,
     grupo_geracao_habilitado,
     grupo_tarifa_branca_habilitado,
 )
@@ -580,6 +581,14 @@ class TarifasEnergiaBrasilSensor(CoordinatorEntity[TarifasEnergiaBrasilCoordinat
             "concessionaria": self.coordinator.data.concessionaria,
             "ultima_atualizacao": self.coordinator.data.atualizado_em.isoformat(),
         }
+        if not atributos_extras_habilitados(
+            {
+                **self._entry.data,
+                **self._entry.options,
+            }
+        ):
+            return attrs
+
         metadata = self.coordinator.data.coletas_por_chave.get(self.entity_description.chave_valor)
         if metadata is not None:
             attrs.update(metadata.como_atributos())

@@ -18,10 +18,12 @@ from .const import (
     CONF_ENTIDADE_CONSUMO,
     CONF_ENTIDADE_GERACAO,
     CONF_ENTIDADE_INJECAO,
+    CONF_HABILITAR_ATRIBUTOS_EXTRAS,
     CONF_HABILITAR_GRUPO_GERACAO,
     CONF_HABILITAR_GRUPO_TARIFA_BRANCA,
     CONF_HORAS_ATUALIZACAO,
     CONF_METODO_ANEEL,
+    CONF_MULTIPLICADOR_FALLBACK_CSV,
     CONF_QUEBRAS_CALCULO,
     CONF_TB_FERIADOS_EXTRAS,
     CONF_TB_INTERMEDIARIO1_FIM,
@@ -40,8 +42,11 @@ from .const import (
     QUEBRA_SEMANAL,
     QUEBRAS_PADRAO,
     TIPOS_FORNECIMENTO_SUPORTADOS,
+    atributos_extras_habilitados,
     grupo_geracao_habilitado,
     grupo_tarifa_branca_habilitado,
+    multiplicador_fallback_csv,
+    normalizar_metodo_aneel,
     obter_concessionarias_suportadas_para_fluxo,
 )
 from .tarifa_branca_time import obter_janelas_padrao_tarifa_branca
@@ -117,8 +122,21 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             ),
             vol.Required(
+                CONF_MULTIPLICADOR_FALLBACK_CSV,
+                default=multiplicador_fallback_csv(defaults),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=1,
+                    max=30,
+                    step=1,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            ),
+            vol.Required(
                 CONF_METODO_ANEEL,
-                default=defaults.get(CONF_METODO_ANEEL, METODO_ANEEL_PADRAO),
+                default=normalizar_metodo_aneel(
+                    defaults.get(CONF_METODO_ANEEL, METODO_ANEEL_PADRAO)
+                ),
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=list(METODOS_ANEEL_SUPORTADOS),
@@ -171,6 +189,10 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     mode=selector.SelectSelectorMode.LIST,
                 )
             ),
+            vol.Required(
+                CONF_HABILITAR_ATRIBUTOS_EXTRAS,
+                default=atributos_extras_habilitados(defaults),
+            ): bool,
         }
 
         if incluir_opcoes_grupo:
@@ -232,6 +254,11 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         normalized[CONF_HABILITAR_GRUPO_GERACAO] = (
             grupo_geracao_habilitado(normalized) if possui_geracao else False
         )
+        normalized[CONF_METODO_ANEEL] = normalizar_metodo_aneel(
+            normalized.get(CONF_METODO_ANEEL, METODO_ANEEL_PADRAO)
+        )
+        normalized[CONF_MULTIPLICADOR_FALLBACK_CSV] = multiplicador_fallback_csv(normalized)
+        normalized[CONF_HABILITAR_ATRIBUTOS_EXTRAS] = atributos_extras_habilitados(normalized)
         normalized[CONF_HABILITAR_GRUPO_TARIFA_BRANCA] = normalized.get(
             CONF_HABILITAR_GRUPO_TARIFA_BRANCA,
             HABILITAR_GRUPO_TARIFA_BRANCA_PADRAO,

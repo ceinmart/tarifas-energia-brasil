@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.1.10 - 2026-06-25
+
+### Alterado
+
+- `datastore_search_sql` deixou de ser oferecido como metodo ANEEL porque o CKAN atual nao reconhece mais essa action; entradas antigas com esse valor passam a usar `datastore_search`.
+- Atributos tecnicos extensos dos sensores passam a ser opcionais e ficam desligados por default para reduzir crescimento da base do Home Assistant.
+- Fallback CSV da ANEEL passa a respeitar multiplicador configuravel da frequencia de atualizacao, com default `3`, evitando repetir downloads grandes em todo ciclo.
+
+### Corrigido
+
+- Respostas CKAN inesperadas agora geram erro controlado com contexto, em vez de quebrar o coordinator por payload fora do formato esperado.
+
 ## 0.1.9 - 2026-04-28
 
 ### Corrigido

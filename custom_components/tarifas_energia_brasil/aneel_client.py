@@ -68,14 +68,26 @@ class AneelClient:
         concessionaria: str,
         priority_method: str,
         reference_date: date,
+        *,
+        csv_fallback_allowed: bool = True,
+        csv_fallback_attempt_callback: Callable[[str], None] | None = None,
     ) -> tuple[dict[str, Any], MetadadosColeta]:
         """Coleta TE/TUSD convencional e branca em chamada otimizada."""
 
         errors: list[str] = []
-        methods = obter_ordem_alternativa_metodo_aneel(priority_method)
+        methods = self._methods_for_request(
+            priority_method,
+            csv_fallback_allowed=csv_fallback_allowed,
+            errors=errors,
+        )
         filters = {"SigAgente": concessionaria}
         for attempts, method in enumerate(methods, start=1):
             try:
+                self._mark_csv_attempt(
+                    "tarifas",
+                    method=method,
+                    callback=csv_fallback_attempt_callback,
+                )
                 records = await self._collect_resource_records(
                     resource_id=self.RESOURCE_TARIFAS,
                     method=method,
@@ -131,17 +143,29 @@ class AneelClient:
         concessionaria: str,
         priority_method: str,
         reference_date: date,
+        *,
+        csv_fallback_allowed: bool = True,
+        csv_fallback_attempt_callback: Callable[[str], None] | None = None,
     ) -> tuple[dict[str, Any], MetadadosColeta]:
         """Coleta componente TUSD_FioB considerando recursos de anos diferentes."""
 
         errors: list[str] = []
-        methods = obter_ordem_alternativa_metodo_aneel(priority_method)
+        methods = self._methods_for_request(
+            priority_method,
+            csv_fallback_allowed=csv_fallback_allowed,
+            errors=errors,
+        )
         filters = {
             "SigNomeAgente": concessionaria,
             "DscComponenteTarifario": "TUSD_FioB",
         }
         for attempts, method in enumerate(methods, start=1):
             try:
+                self._mark_csv_attempt(
+                    "fio_b",
+                    method=method,
+                    callback=csv_fallback_attempt_callback,
+                )
                 all_records: list[dict[str, Any]] = []
                 resource_errors: list[str] = []
                 checked_resource_ids: list[str] = []
@@ -230,13 +254,25 @@ class AneelClient:
         self,
         priority_method: str,
         reference_date: date,
+        *,
+        csv_fallback_allowed: bool = True,
+        csv_fallback_attempt_callback: Callable[[str], None] | None = None,
     ) -> tuple[dict[str, Any], MetadadosColeta]:
         """Coleta bandeira vigente e adicional homologado."""
 
         errors: list[str] = []
-        methods = obter_ordem_alternativa_metodo_aneel(priority_method)
+        methods = self._methods_for_request(
+            priority_method,
+            csv_fallback_allowed=csv_fallback_allowed,
+            errors=errors,
+        )
         for attempts, method in enumerate(methods, start=1):
             try:
+                self._mark_csv_attempt(
+                    "bandeira",
+                    method=method,
+                    callback=csv_fallback_attempt_callback,
+                )
                 acionamentos = await self._collect_resource_records(
                     resource_id=self.RESOURCE_BANDEIRAS_ACIONAMENTO,
                     method=method,
@@ -313,7 +349,9 @@ class AneelClient:
         if method == METODO_ANEEL_BUSCA_DADOS:
             return await self._datastore_search_records(resource_id, filters)
         if method == METODO_ANEEL_BUSCA_DADOS_SQL:
-            return await self._datastore_search_sql_records(resource_id, filters)
+            raise AneelClientError(
+                "Metodo ANEEL legado indisponivel no CKAN atual: datastore_search_sql."
+            )
         if method == METODO_ANEEL_CSV_XML:
             return await self._csv_xml_records(resource_id, filters, early_stop=early_stop)
         raise AneelClientError(f"Metodo ANEEL invalido: {method}")
@@ -429,10 +467,48 @@ class AneelClient:
             timeout=ANEEL_JSON_TIMEOUT_SECONDS,
         ) as response:
             response.raise_for_status()
-            payload = await response.json(content_type=None)
+            try:
+                payload = await response.json(content_type=None)
+            except Exception as err:  # pragma: no cover - depende do aiohttp em runtime
+                raise AneelClientError(
+                    f"Resposta CKAN invalida para {action}: JSON nao parseavel."
+                ) from err
+        if not isinstance(payload, dict):
+            raise AneelClientError(
+                f"Resposta CKAN invalida para {action}: tipo={type(payload).__name__}."
+            )
         if not payload.get("success", False):
-            raise AneelClientError(f"Resposta CKAN sem sucesso para {action}.")
+            detail = payload.get("error") or payload.get("message") or payload
+            raise AneelClientError(f"Resposta CKAN sem sucesso para {action}: {detail}.")
         return payload
+
+    @staticmethod
+    def _methods_for_request(
+        priority_method: str,
+        *,
+        csv_fallback_allowed: bool,
+        errors: list[str],
+    ) -> list[str]:
+        """Monta a ordem efetiva respeitando bloqueio temporario do CSV."""
+
+        methods = obter_ordem_alternativa_metodo_aneel(priority_method)
+        if csv_fallback_allowed:
+            return methods
+        if METODO_ANEEL_CSV_XML in methods:
+            errors.append("csv_xml: fallback CSV bloqueado pela cadencia configurada")
+        return [method for method in methods if method != METODO_ANEEL_CSV_XML]
+
+    @staticmethod
+    def _mark_csv_attempt(
+        dataset_key: str,
+        *,
+        method: str,
+        callback: Callable[[str], None] | None,
+    ) -> None:
+        """Notifica o coordinator antes de iniciar um download CSV."""
+
+        if method == METODO_ANEEL_CSV_XML and callback is not None:
+            callback(dataset_key)
 
     async def _filtered_csv_records_from_response(
         self,

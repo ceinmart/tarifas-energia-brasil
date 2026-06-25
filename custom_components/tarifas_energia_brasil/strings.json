@@ -8,12 +8,14 @@
           "concessionaria": "Concessionaria",
           "dia_leitura_reset_mensal": "Dia de leitura/reset mensal",
           "frequencia_atualizacao_horas": "Frequencia de atualizacao (horas)",
+          "multiplicador_fallback_csv": "Multiplicador do fallback CSV",
           "meio_prioritario_aneel": "Meio prioritario de acesso ANEEL",
           "entidade_consumo_kwh": "Entidade de consumo acumulado (kWh)",
           "entidade_geracao_kwh": "Entidade de geracao acumulada (kWh)",
           "entidade_injecao_kwh": "Entidade de energia injetada acumulada (kWh)",
           "tipo_fornecimento": "Tipo de fornecimento",
-          "quebras_calculo": "Quebras de calculo"
+          "quebras_calculo": "Quebras de calculo",
+          "habilitar_atributos_extras": "Informacoes extras nos atributos"
         }
       }
     },
@@ -28,7 +30,29 @@
     "step": {
       "init": {
         "title": "Ajustes da integracao",
-        "description": "Atualize concessionaria, entidades, frequencia e quebras."
+        "description": "Atualize concessionaria, entidades, frequencia e quebras.",
+        "data": {
+          "concessionaria": "Concessionaria",
+          "dia_leitura_reset_mensal": "Dia de leitura/reset mensal",
+          "frequencia_atualizacao_horas": "Frequencia de atualizacao (horas)",
+          "multiplicador_fallback_csv": "Multiplicador do fallback CSV",
+          "meio_prioritario_aneel": "Meio prioritario de acesso ANEEL",
+          "entidade_consumo_kwh": "Entidade de consumo acumulado (kWh)",
+          "entidade_geracao_kwh": "Entidade de geracao acumulada (kWh)",
+          "entidade_injecao_kwh": "Entidade de energia injetada acumulada (kWh)",
+          "tipo_fornecimento": "Tipo de fornecimento",
+          "quebras_calculo": "Quebras de calculo",
+          "habilitar_atributos_extras": "Informacoes extras nos atributos",
+          "habilitar_grupo_geracao": "Publicar sensores de geracao",
+          "habilitar_grupo_tarifa_branca": "Publicar sensores de Tarifa Branca",
+          "tarifa_branca_inicio_ponta": "Tarifa Branca - inicio ponta",
+          "tarifa_branca_fim_ponta": "Tarifa Branca - fim ponta",
+          "tarifa_branca_inicio_intermediario_1": "Tarifa Branca - inicio intermediario 1",
+          "tarifa_branca_fim_intermediario_1": "Tarifa Branca - fim intermediario 1",
+          "tarifa_branca_inicio_intermediario_2": "Tarifa Branca - inicio intermediario 2",
+          "tarifa_branca_fim_intermediario_2": "Tarifa Branca - fim intermediario 2",
+          "tarifa_branca_feriados_extras": "Tarifa Branca - feriados extras"
+        }
       }
     },
     "error": {

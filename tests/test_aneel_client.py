@@ -205,8 +205,12 @@ AneelClient = aneel_module.AneelClient
 ANEEL_CSV_TIMEOUT_SECONDS = aneel_module.ANEEL_CSV_TIMEOUT_SECONDS
 ANEEL_JSON_TIMEOUT_SECONDS = aneel_module.ANEEL_JSON_TIMEOUT_SECONDS
 DATASTORE_SEARCH_PAGE_LIMIT = aneel_module.DATASTORE_SEARCH_PAGE_LIMIT
+METODO_ANEEL_BUSCA_DADOS_SQL = aneel_module.METODO_ANEEL_BUSCA_DADOS_SQL
+METODO_ANEEL_CSV_XML = aneel_module.METODO_ANEEL_CSV_XML
 RESOURCE_FIO_B_ANOS = aneel_module.AneelClient.RESOURCE_FIO_B_ANOS
 TRIBUTOS_HTTP_TIMEOUT_SECONDS = tributos_module.TRIBUTOS_HTTP_TIMEOUT_SECONDS
+AneelClientError = aneel_module.AneelClientError
+obter_ordem_alternativa_metodo_aneel = aneel_module.obter_ordem_alternativa_metodo_aneel
 
 
 class _FakeStreamContent:
@@ -347,6 +351,38 @@ def test_datastore_search_uses_smaller_pages_without_total_count():
     assert params["limit"] == DATASTORE_SEARCH_PAGE_LIMIT
     assert DATASTORE_SEARCH_PAGE_LIMIT == 1000
     assert params["include_total"] == "false"
+
+
+def test_legacy_sql_method_is_not_in_normal_fallback_order():
+    methods = obter_ordem_alternativa_metodo_aneel(METODO_ANEEL_BUSCA_DADOS_SQL)
+
+    assert methods == ["datastore_search", METODO_ANEEL_CSV_XML]
+    assert METODO_ANEEL_BUSCA_DADOS_SQL not in methods
+
+
+def test_request_json_rejects_non_object_ckan_payload():
+    session = _FakeSession([_FakeResponse(payload="Requisicao incorreta")])
+    client = AneelClient(session=session)
+
+    with pytest.raises(AneelClientError, match="tipo=str"):
+        asyncio.run(client._request_json("datastore_search_sql", {"sql": "SELECT 1"}))
+
+
+def test_request_json_includes_ckan_error_detail():
+    session = _FakeSession(
+        [
+            _FakeResponse(
+                payload={
+                    "success": False,
+                    "error": {"message": "Action name not known: datastore_search_sql"},
+                }
+            )
+        ]
+    )
+    client = AneelClient(session=session)
+
+    with pytest.raises(AneelClientError, match="Action name not known"):
+        asyncio.run(client._request_json("datastore_search_sql", {"sql": "SELECT 1"}))
 
 
 def test_pick_latest_bandeira_includes_month_vigencia_period():
@@ -500,6 +536,21 @@ def test_aneel_failure_log_includes_filters_and_exception_class(caplog):
     assert '"SigNomeAgente": "CPFL-PIRATINING"' in message
     assert '"DscComponenteTarifario": "TUSD_FioB"' in message
     assert "TimeoutError" in message
+
+
+def test_aneel_fallback_success_log_is_warning(caplog):
+    client = AneelClient(session=None)
+    caplog.set_level(logging.WARNING, logger=aneel_module.__name__)
+
+    client._log_aneel_method_success(
+        dataset="tarifas",
+        method=METODO_ANEEL_CSV_XML,
+        attempts=2,
+        filters={"SigAgente": "CPFL-PIRATINING"},
+    )
+
+    assert "ANEEL fallback concluido" in caplog.text
+    assert caplog.records[-1].levelno == logging.WARNING
 
 
 def test_fetch_fio_b_csv_stops_after_first_valid_resource():
