@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.11 - 2026-08-06
+
+### Corrigido
+
+- Sensores monetarios passam a usar `state_class: total`, conforme exigido pelo Home Assistant, eliminando avisos de configuracao invalida.
+- O cancelamento da atualizacao inicial deixa de devolver o booleano de `Task.cancel()` ao processamento de unload, evitando `TypeError` ao recarregar ou desativar a integracao.
+- O fallback CSV da ANEEL recusa recursos maiores que 50 MiB antes do processamento e tambem aplica o limite durante o streaming quando o servidor nao informa um tamanho confiavel, evitando consumo excessivo de rede, CPU e memoria no Home Assistant.
+
 ## 0.1.10 - 2026-06-25
 
 ### Alterado

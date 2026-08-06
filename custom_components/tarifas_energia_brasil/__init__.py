@@ -42,9 +42,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _async_refresh_after_setup(coordinator),
         f"{DOMAIN}_{entry.entry_id}_initial_refresh",
     )
-    entry.async_on_unload(refresh_task.cancel)
+    entry.async_on_unload(lambda: _cancel_task(refresh_task))
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     return True
+
+
+def _cancel_task(task: asyncio.Task) -> None:
+    """Cancela tarefa sem expor o retorno booleano de Task.cancel ao HA."""
+
+    task.cancel()
 
 
 async def _async_refresh_after_setup(

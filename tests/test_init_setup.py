@@ -165,7 +165,9 @@ def test_setup_entry_schedules_initial_refresh_without_blocking_setup():
         assert hass.data["tarifas_energia_brasil"][entry.entry_id] is coordinator
         assert len(hass.tasks) == 1
         assert hass.tasks[0].get_name() == "tarifas_energia_brasil_entry-1_initial_refresh"
-        assert hass.tasks[0].cancel in entry.unloads
+        cancel_callback = entry.unloads[0]
+        assert cancel_callback() is None
+        assert hass.tasks[0].done() or hass.tasks[0].cancelling()
 
     _FakeCoordinator.instances.clear()
     hass = _FakeHass()

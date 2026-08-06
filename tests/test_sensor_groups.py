@@ -61,6 +61,7 @@ def _install_fake_homeassistant_modules() -> None:
 
     class SensorStateClass(StrEnum):
         MEASUREMENT = "measurement"
+        TOTAL = "total"
 
     class Platform(StrEnum):
         SENSOR = "sensor"
@@ -234,6 +235,31 @@ def test_regular_group_is_always_present():
     assert "valor_conta_consumo_regular_sem_disponibilidade_diario_r" not in keys
     assert "valor_conta_tarifa_branca_diario_r" not in keys
     assert "valor_conta_com_geracao_diario_r" not in keys
+
+
+def test_monetary_sensors_use_total_state_class():
+    entry = ConfigEntry(
+        data={
+            CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+            CONF_ENTIDADE_CONSUMO: "sensor.consumo_total",
+            CONF_ENTIDADE_GERACAO: "sensor.geracao_total",
+            CONF_HABILITAR_GRUPO_GERACAO: True,
+            CONF_HABILITAR_GRUPO_TARIFA_BRANCA: True,
+        },
+        options={},
+    )
+
+    monetary = [
+        description
+        for description in montar_descricoes_sensores(entry)
+        if description.device_class == sensor_impl.SensorDeviceClass.MONETARY
+    ]
+
+    assert monetary
+    assert all(
+        description.state_class == sensor_impl.SensorStateClass.TOTAL
+        for description in monetary
+    )
 
 
 def test_generation_group_depends_on_entity_and_toggle():

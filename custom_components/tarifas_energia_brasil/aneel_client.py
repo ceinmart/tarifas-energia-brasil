@@ -37,6 +37,7 @@ CSV_STREAM_CHUNK_SIZE = 64 * 1024
 CSV_STREAM_ENCODING = "latin-1"
 CSV_PROGRESS_LOG_INTERVAL_SECONDS = 60
 CSV_PROGRESS_LOG_INTERVAL_BYTES = 100 * 1024 * 1024
+CSV_MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024
 DATASTORE_SEARCH_PAGE_LIMIT = 1000
 
 
@@ -437,11 +438,18 @@ class AneelClient:
             response.raise_for_status()
             response_headers = getattr(response, "headers", None)
             content_length = response_headers.get("Content-Length") if response_headers else None
+            parsed_content_length = self._parse_content_length(content_length)
             _LOGGER.warning(
                 "ANEEL CSV resposta recebida: resource_id=%s; content_length=%s",
                 resource_id,
                 content_length or "desconhecido",
             )
+            if parsed_content_length is not None and parsed_content_length > CSV_MAX_DOWNLOAD_BYTES:
+                raise AneelClientError(
+                    "CSV ANEEL excede o limite seguro para processamento no Home Assistant: "
+                    f"resource_id={resource_id}; tamanho={parsed_content_length}; "
+                    f"limite={CSV_MAX_DOWNLOAD_BYTES} bytes."
+                )
             records = await self._filtered_csv_records_from_response(
                 response,
                 filters,
@@ -456,6 +464,16 @@ class AneelClient:
             elapsed,
         )
         return records
+
+    @staticmethod
+    def _parse_content_length(value: Any) -> int | None:
+        """Converte Content-Length valido sem confiar em cabecalho externo."""
+
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed >= 0 else None
 
     async def _request_json(self, action: str, params: dict[str, Any]) -> dict[str, Any]:
         """Executa request JSON para endpoint CKAN."""
@@ -582,6 +600,12 @@ class AneelClient:
         last_log_bytes = 0
         async for chunk in response.content.iter_chunked(CSV_STREAM_CHUNK_SIZE):
             bytes_read += len(chunk)
+            if bytes_read > CSV_MAX_DOWNLOAD_BYTES:
+                raise AneelClientError(
+                    "CSV ANEEL excedeu o limite seguro durante o streaming: "
+                    f"resource_id={resource_id or 'desconhecido'}; "
+                    f"limite={CSV_MAX_DOWNLOAD_BYTES} bytes."
+                )
             now = time.monotonic()
             if resource_id and (
                 now - last_log_at >= CSV_PROGRESS_LOG_INTERVAL_SECONDS

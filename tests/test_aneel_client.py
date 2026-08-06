@@ -204,6 +204,7 @@ tributos_module = _load_module(f"{_PKG_NAME}.tributos", _BASE_DIR / "tributos" /
 AneelClient = aneel_module.AneelClient
 ANEEL_CSV_TIMEOUT_SECONDS = aneel_module.ANEEL_CSV_TIMEOUT_SECONDS
 ANEEL_JSON_TIMEOUT_SECONDS = aneel_module.ANEEL_JSON_TIMEOUT_SECONDS
+CSV_MAX_DOWNLOAD_BYTES = aneel_module.CSV_MAX_DOWNLOAD_BYTES
 DATASTORE_SEARCH_PAGE_LIMIT = aneel_module.DATASTORE_SEARCH_PAGE_LIMIT
 METODO_ANEEL_BUSCA_DADOS_SQL = aneel_module.METODO_ANEEL_BUSCA_DADOS_SQL
 METODO_ANEEL_CSV_XML = aneel_module.METODO_ANEEL_CSV_XML
@@ -476,6 +477,47 @@ def test_csv_fallback_uses_extended_timeout_and_filters_streamed_chunks():
         {"SigAgente": "CPFL-PIRATINING", "Nome": "com, virgula", "Valor": "1"},
         {"SigAgente": "CPFL-PIRATINING", "Nome": "y", "Valor": "3"},
     ]
+
+
+def test_csv_fallback_rejects_oversized_resource_before_streaming():
+    session = _FakeSession(
+        [
+            _FakeResponse(
+                payload={
+                    "success": True,
+                    "result": {"url": "https://example.test/large.csv"},
+                }
+            ),
+            _FakeResponse(
+                chunks=[b"SigAgente,Valor\nCPFL-PIRATINING,1\n"],
+                headers={"Content-Length": str(CSV_MAX_DOWNLOAD_BYTES + 1)},
+            ),
+        ]
+    )
+    client = AneelClient(session=session)
+
+    with pytest.raises(AneelClientError, match="excede o limite seguro"):
+        asyncio.run(
+            client._csv_xml_records(
+                resource_id="resource-id",
+                filters={"SigAgente": "CPFL-PIRATINING"},
+            )
+        )
+
+    assert len(session.calls) == 2
+
+
+def test_csv_stream_enforces_limit_without_content_length(monkeypatch):
+    monkeypatch.setattr(aneel_module, "CSV_MAX_DOWNLOAD_BYTES", 10)
+    response = _FakeResponse(chunks=[b"x" * 11])
+    client = AneelClient(session=None)
+
+    async def _consume_rows() -> None:
+        async for _row in client._iter_csv_rows_from_response(response):
+            pass
+
+    with pytest.raises(AneelClientError, match="excedeu o limite seguro"):
+        asyncio.run(_consume_rows())
 
 
 def test_csv_fallback_filters_semicolon_latin1_chunks():

@@ -6,7 +6,7 @@ Projeto/pasta: ha.ext.tarifas
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -477,7 +477,10 @@ def montar_descricoes_sensores(entry: ConfigEntry) -> tuple[DescricaoSensorTarif
                 )
 
     descriptions = [
-        description
+        replace(description, state_class=SensorStateClass.TOTAL)
+        if description.device_class == SensorDeviceClass.MONETARY
+        and description.state_class == SensorStateClass.MEASUREMENT
+        else description
         for description in (*DESCRICOES_SENSORES_BASE, *descricoes_dinamicas)
         if description.grupo in grupos_habilitados
     ]
