@@ -27,10 +27,10 @@ Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de
 
 ## Status
 
-- Versao atual: [`0.2.0`](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.0) (release oficial).
+- Versao atual: [`0.2.1`](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.1) (release oficial).
 - Escopo inicial: base funcional da integracao + MVP com concessionarias suportadas.
 - Concessionaria obrigatoria do MVP: `CPFL-PIRATINING`.
-- Documentacao tecnica de referencia: [DOCUMENTACAO_CODIGO_0.2.0.md](./docs/releases/DOCUMENTACAO_CODIGO_0.2.0.md).
+- Documentacao tecnica de referencia: [DOCUMENTACAO_CODIGO_0.2.1.md](./docs/releases/DOCUMENTACAO_CODIGO_0.2.1.md).
 - Historico completo de mudancas: [CHANGELOG](./docs/releases/CHANGELOG.md).
 
 ## Instalacao (HACS)
@@ -170,7 +170,8 @@ Exemplos basicos:
   - `e8717aa8-2521-453f-bf16-fbb9a16eea39`, `a4060165-3a0c-404f-926c-83901088b67c`, `70ac08d1-53fc-4ceb-9c22-3a3a2c70e9fa` (Fio B multi-ano)
   - `0591b8f6-fe54-437b-b72b-1aa2efd46e42` (acionamento de bandeiras)
   - `5879ca80-b3bd-45b1-a135-d9b77c1d5b36` (adicional de bandeiras)
-- Alternativo automatico exclusivo do Fio B: Parquet anual (limite de 100 MiB).
+- Alternativo automatico exclusivo do Fio B: Parquet anual (limite de 100 MiB),
+  processado preferencialmente com DuckDB existente ou com PyArrow.
 - CSV e usado somente pelas actions manuais `atualizar_via_csv` e
   `cancelar_atualizacao_csv`. O processamento e feito em streaming e pode ser cancelado.
 
@@ -355,7 +356,7 @@ Regra adicional implementada:
 
 ## Links de versao
 
-- [Documentacao tecnica da versao 0.2.0](./docs/releases/DOCUMENTACAO_CODIGO_0.2.0.md)
+- [Documentacao tecnica da versao 0.2.1](./docs/releases/DOCUMENTACAO_CODIGO_0.2.1.md)
 - [Changelog completo](./docs/releases/CHANGELOG.md)
-- [Release 0.2.0 no GitHub](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.0)
+- [Release 0.2.1 no GitHub](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.1)
 - [Todas as releases](https://github.com/ceinmart/tarifas-energia-brasil/releases)

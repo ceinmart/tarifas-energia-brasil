@@ -1,5 +1,6 @@
-"""Versao: 0.1.0
+"""Versao: 0.2.1
 Criado em: 2026-04-23 16:20:00 -03:00
+Alterado em: 2026-08-10 15:50 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -554,6 +555,111 @@ def test_duckdb_parquet_selects_cpfl_piratining_fio_b(tmp_path):
 
     assert len(records) == 1
     assert float(records[0]["VlrComponenteTarifario"]) == pytest.approx(189.008164374)
+
+
+def test_pyarrow_parquet_selects_cpfl_piratining_fio_b(tmp_path):
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    parquet_path = tmp_path / "fio_b_pyarrow.parquet"
+    pq.write_table(
+        pa.table(
+            {
+                "SigNomeAgente": ["CPFL-PIRATINING", "OUTRA"],
+                "DscComponenteTarifario": ["TUSD_FioB", "TUSD_FioB"],
+                "DatInicioVigencia": ["2025-10-23", "2025-01-01"],
+                "DatFimVigencia": ["2026-10-22", "2026-12-31"],
+                "VlrComponenteTarifario": [189.008164374, 999.0],
+            }
+        ),
+        parquet_path,
+    )
+
+    records = AneelClient._query_parquet_pyarrow_sync(
+        pq,
+        str(parquet_path),
+        {
+            "SigNomeAgente": "CPFL-PIRATINING",
+            "DscComponenteTarifario": "TUSD_FioB",
+        },
+    )
+
+    assert len(records) == 1
+    assert records[0]["VlrComponenteTarifario"] == pytest.approx(189.008164374)
+
+
+def test_parquet_engine_prefers_duckdb(monkeypatch):
+    duckdb_module = object()
+    monkeypatch.setattr(
+        aneel_module.importlib,
+        "import_module",
+        lambda name: duckdb_module if name == "duckdb" else pytest.fail(name),
+    )
+    monkeypatch.setattr(
+        AneelClient,
+        "_query_parquet_duckdb_sync",
+        staticmethod(lambda module, path, filters: [{"engine": "duckdb"}]),
+    )
+
+    records = AneelClient._query_parquet_file_sync("unused.parquet", None)
+
+    assert records == [{"engine": "duckdb"}]
+
+
+def test_parquet_engine_falls_back_to_pyarrow(monkeypatch, caplog):
+    pyarrow_module = object()
+
+    def _import_engine(name):
+        if name == "duckdb":
+            raise ModuleNotFoundError("duckdb")
+        return pyarrow_module
+
+    monkeypatch.setattr(aneel_module.importlib, "import_module", _import_engine)
+    monkeypatch.setattr(
+        AneelClient,
+        "_query_parquet_pyarrow_sync",
+        staticmethod(lambda module, path, filters: [{"engine": "pyarrow"}]),
+    )
+    caplog.set_level(logging.INFO, logger=aneel_module.__name__)
+
+    records = AneelClient._query_parquet_file_sync("unused.parquet", None)
+
+    assert records == [{"engine": "pyarrow"}]
+    assert "trocando engine duckdb por pyarrow" in caplog.text
+    assert "engine=pyarrow" in caplog.text
+
+
+def test_parquet_engine_falls_back_when_duckdb_query_fails(monkeypatch):
+    monkeypatch.setattr(
+        aneel_module.importlib,
+        "import_module",
+        lambda name: object(),
+    )
+    monkeypatch.setattr(
+        AneelClient,
+        "_query_parquet_duckdb_sync",
+        staticmethod(lambda module, path, filters: (_ for _ in ()).throw(RuntimeError("boom"))),
+    )
+    monkeypatch.setattr(
+        AneelClient,
+        "_query_parquet_pyarrow_sync",
+        staticmethod(lambda module, path, filters: [{"engine": "pyarrow"}]),
+    )
+
+    records = AneelClient._query_parquet_file_sync("unused.parquet", None)
+
+    assert records == [{"engine": "pyarrow"}]
+
+
+def test_parquet_engine_failure_is_controlled(monkeypatch):
+    monkeypatch.setattr(
+        aneel_module.importlib,
+        "import_module",
+        lambda name: (_ for _ in ()).throw(ModuleNotFoundError(name)),
+    )
+
+    with pytest.raises(AneelClientError, match="action CSV manual"):
+        AneelClient._query_parquet_file_sync("unused.parquet", None)
 
 
 def test_csv_fallback_filters_semicolon_latin1_chunks():

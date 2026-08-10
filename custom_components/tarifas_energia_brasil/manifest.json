@@ -15,6 +15,6 @@
   "loggers": [
     "custom_components.tarifas_energia_brasil"
   ],
-  "requirements": ["duckdb==1.5.5"],
-  "version": "0.2.0"
+  "requirements": ["pyarrow==25.0.0"],
+  "version": "0.2.1"
 }

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-08-10
+
+### Corrigido
+
+- PyArrow substitui DuckDB como requisito instalavel, evitando falha de setup no
+  Home Assistant com Python 3.14, musl e ARM64.
+- O leitor Parquet prioriza DuckDB quando ele ja existe e alterna para PyArrow
+  quando o primeiro engine esta ausente ou falha.
+
 ### Documentacao
 
 - README atualizado para indicar a release atual, a documentacao tecnica da
