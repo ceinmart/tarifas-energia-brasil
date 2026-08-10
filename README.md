@@ -27,10 +27,10 @@ Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de
 
 ## Status
 
-- Versao atual: `0.1.9` (release oficial).
+- Versao atual: [`0.2.0`](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.0) (release oficial).
 - Escopo inicial: base funcional da integracao + MVP com concessionarias suportadas.
 - Concessionaria obrigatoria do MVP: `CPFL-PIRATINING`.
-- Documentacao tecnica de referencia: [DOCUMENTACAO_CODIGO_0.1.9.md](./docs/releases/DOCUMENTACAO_CODIGO_0.1.9.md).
+- Documentacao tecnica de referencia: [DOCUMENTACAO_CODIGO_0.2.0.md](./docs/releases/DOCUMENTACAO_CODIGO_0.2.0.md).
 - Historico completo de mudancas: [CHANGELOG](./docs/releases/CHANGELOG.md).
 
 ## Instalacao (HACS)
@@ -355,5 +355,7 @@ Regra adicional implementada:
 
 ## Links de versao
 
-- [CHANGELOG](./docs/releases/CHANGELOG.md)
-- [Releases](https://github.com/ceinmart/tarifas-energia-brasil/releases)
+- [Documentacao tecnica da versao 0.2.0](./docs/releases/DOCUMENTACAO_CODIGO_0.2.0.md)
+- [Changelog completo](./docs/releases/CHANGELOG.md)
+- [Release 0.2.0 no GitHub](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.0)
+- [Todas as releases](https://github.com/ceinmart/tarifas-energia-brasil/releases)

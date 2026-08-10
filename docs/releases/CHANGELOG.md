@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Documentacao
+
+- README atualizado para indicar a release atual, a documentacao tecnica da
+  versao, o changelog completo e os links diretos das releases no GitHub.
+
 ## 0.2.0 - 2026-08-10
 
 ### Alterado
