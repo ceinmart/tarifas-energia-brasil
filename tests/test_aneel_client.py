@@ -168,8 +168,15 @@ def _install_aiohttp_stub() -> None:
     class ClientError(Exception):
         pass
 
+    class ClientTimeout:
+        def __init__(self, *, total=None, connect=None, sock_read=None):  # noqa: ANN001
+            self.total = total
+            self.connect = connect
+            self.sock_read = sock_read
+
     aiohttp.ClientSession = ClientSession
     aiohttp.ClientError = ClientError
+    aiohttp.ClientTimeout = ClientTimeout
     sys.modules["aiohttp"] = aiohttp
 
 
@@ -204,10 +211,9 @@ tributos_module = _load_module(f"{_PKG_NAME}.tributos", _BASE_DIR / "tributos" /
 AneelClient = aneel_module.AneelClient
 ANEEL_CSV_TIMEOUT_SECONDS = aneel_module.ANEEL_CSV_TIMEOUT_SECONDS
 ANEEL_JSON_TIMEOUT_SECONDS = aneel_module.ANEEL_JSON_TIMEOUT_SECONDS
-CSV_MAX_DOWNLOAD_BYTES = aneel_module.CSV_MAX_DOWNLOAD_BYTES
 DATASTORE_SEARCH_PAGE_LIMIT = aneel_module.DATASTORE_SEARCH_PAGE_LIMIT
 METODO_ANEEL_BUSCA_DADOS_SQL = aneel_module.METODO_ANEEL_BUSCA_DADOS_SQL
-METODO_ANEEL_CSV_XML = aneel_module.METODO_ANEEL_CSV_XML
+METODO_ANEEL_CSV_XML = aneel_module.METODO_ANEEL_CSV_MANUAL
 RESOURCE_FIO_B_ANOS = aneel_module.AneelClient.RESOURCE_FIO_B_ANOS
 TRIBUTOS_HTTP_TIMEOUT_SECONDS = tributos_module.TRIBUTOS_HTTP_TIMEOUT_SECONDS
 AneelClientError = aneel_module.AneelClientError
@@ -357,7 +363,7 @@ def test_datastore_search_uses_smaller_pages_without_total_count():
 def test_legacy_sql_method_is_not_in_normal_fallback_order():
     methods = obter_ordem_alternativa_metodo_aneel(METODO_ANEEL_BUSCA_DADOS_SQL)
 
-    assert methods == ["datastore_search", METODO_ANEEL_CSV_XML]
+    assert methods == ["datastore_search"]
     assert METODO_ANEEL_BUSCA_DADOS_SQL not in methods
 
 
@@ -471,15 +477,15 @@ def test_csv_fallback_uses_extended_timeout_and_filters_streamed_chunks():
     )
 
     assert session.calls[0]["timeout"] == ANEEL_JSON_TIMEOUT_SECONDS
-    assert session.calls[1]["timeout"] == ANEEL_CSV_TIMEOUT_SECONDS
-    assert ANEEL_CSV_TIMEOUT_SECONDS == 600
+    assert session.calls[1]["timeout"].total is None
+    assert session.calls[1]["timeout"].sock_read == ANEEL_CSV_TIMEOUT_SECONDS
     assert records == [
         {"SigAgente": "CPFL-PIRATINING", "Nome": "com, virgula", "Valor": "1"},
         {"SigAgente": "CPFL-PIRATINING", "Nome": "y", "Valor": "3"},
     ]
 
 
-def test_csv_fallback_rejects_oversized_resource_before_streaming():
+def test_csv_fallback_accepts_resource_larger_than_old_50_mib_limit():
     session = _FakeSession(
         [
             _FakeResponse(
@@ -490,25 +496,24 @@ def test_csv_fallback_rejects_oversized_resource_before_streaming():
             ),
             _FakeResponse(
                 chunks=[b"SigAgente,Valor\nCPFL-PIRATINING,1\n"],
-                headers={"Content-Length": str(CSV_MAX_DOWNLOAD_BYTES + 1)},
+                headers={"Content-Length": str(51 * 1024 * 1024)},
             ),
         ]
     )
     client = AneelClient(session=session)
 
-    with pytest.raises(AneelClientError, match="excede o limite seguro"):
-        asyncio.run(
-            client._csv_xml_records(
-                resource_id="resource-id",
-                filters={"SigAgente": "CPFL-PIRATINING"},
-            )
+    records = asyncio.run(
+        client._csv_xml_records(
+            resource_id="resource-id",
+            filters={"SigAgente": "CPFL-PIRATINING"},
         )
+    )
 
     assert len(session.calls) == 2
+    assert records[0]["SigAgente"] == "CPFL-PIRATINING"
 
 
-def test_csv_stream_enforces_limit_without_content_length(monkeypatch):
-    monkeypatch.setattr(aneel_module, "CSV_MAX_DOWNLOAD_BYTES", 10)
+def test_csv_stream_has_no_total_size_limit():
     response = _FakeResponse(chunks=[b"x" * 11])
     client = AneelClient(session=None)
 
@@ -516,8 +521,39 @@ def test_csv_stream_enforces_limit_without_content_length(monkeypatch):
         async for _row in client._iter_csv_rows_from_response(response):
             pass
 
-    with pytest.raises(AneelClientError, match="excedeu o limite seguro"):
-        asyncio.run(_consume_rows())
+    asyncio.run(_consume_rows())
+
+
+def test_duckdb_parquet_selects_cpfl_piratining_fio_b(tmp_path):
+    import duckdb
+
+    parquet_path = tmp_path / "fio_b.parquet"
+    connection = duckdb.connect(":memory:")
+    connection.execute(
+        """
+        CREATE TABLE fio_b AS SELECT * FROM (VALUES
+          ('CPFL-PIRATINING', 'TUSD_FioB', '2025-10-23', '2026-10-22',
+           'Convencional', 'B1', 189.008164374),
+          ('OUTRA', 'TUSD_FioB', '2025-01-01', '2026-12-31',
+           'Convencional', 'B1', 999.0)
+        ) t("SigNomeAgente", "DscComponenteTarifario", "DatInicioVigencia",
+            "DatFimVigencia", "DscModalidadeTarifaria", "DscSubGrupoTarifario",
+            "VlrComponenteTarifario")
+        """
+    )
+    connection.execute("COPY fio_b TO ? (FORMAT PARQUET)", [str(parquet_path)])
+    connection.close()
+
+    records = AneelClient._query_parquet_sync(
+        parquet_path.read_bytes(),
+        {
+            "SigNomeAgente": "CPFL-PIRATINING",
+            "DscComponenteTarifario": "TUSD_FioB",
+        },
+    )
+
+    assert len(records) == 1
+    assert float(records[0]["VlrComponenteTarifario"]) == pytest.approx(189.008164374)
 
 
 def test_csv_fallback_filters_semicolon_latin1_chunks():
@@ -567,14 +603,14 @@ def test_aneel_failure_log_includes_filters_and_exception_class(caplog):
     caplog.set_level(logging.WARNING, logger=aneel_module.__name__)
     client._log_aneel_method_failure(
         dataset="componentes-tarifarias/Fio B",
-        method="csv_xml",
+        method=METODO_ANEEL_CSV_XML,
         next_method=None,
         filters=filters,
         err=TimeoutError(),
     )
 
     message = caplog.text
-    assert "metodo=csv_xml" in message
+    assert "metodo=csv_manual" in message
     assert '"SigNomeAgente": "CPFL-PIRATINING"' in message
     assert '"DscComponenteTarifario": "TUSD_FioB"' in message
     assert "TimeoutError" in message
@@ -639,8 +675,9 @@ def test_fetch_fio_b_csv_stops_after_first_valid_resource():
     parsed, metadata = asyncio.run(
         client.fetch_fio_b(
             concessionaria="CPFL-PIRATINING",
-            priority_method="csv_xml",
+            priority_method="datastore_search",
             reference_date=date(2026, 4, 27),
+            manual_csv=True,
         )
     )
 

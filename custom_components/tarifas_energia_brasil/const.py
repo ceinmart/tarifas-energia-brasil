@@ -1,5 +1,6 @@
-"""Versao: 0.1.0
+"""Versao: 0.2.0
 Criado em: 2026-04-22 21:41:36 -03:00
+Alterado em: 2026-08-10 (America/Sao_Paulo)
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -13,7 +14,7 @@ from homeassistant.const import Platform
 
 DOMAIN = "tarifas_energia_brasil"
 NAME = "Tarifas Energia Brasil"
-VERSION = "0.1.11"
+VERSION = "0.2.0"
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
@@ -59,9 +60,10 @@ TIPOS_FORNECIMENTO_SUPORTADOS: tuple[str, ...] = (
 METODO_ANEEL_BUSCA_DADOS = "datastore_search"
 METODO_ANEEL_BUSCA_DADOS_SQL = "datastore_search_sql"
 METODO_ANEEL_CSV_XML = "csv_xml"
+METODO_ANEEL_CSV_MANUAL = "csv_manual"
+METODO_ANEEL_PARQUET = "parquet"
 METODOS_ANEEL_SUPORTADOS: tuple[str, ...] = (
     METODO_ANEEL_BUSCA_DADOS,
-    METODO_ANEEL_CSV_XML,
 )
 
 DIA_LEITURA_PADRAO = 1
@@ -158,7 +160,7 @@ def obter_ordem_alternativa_metodo_aneel(priority_method: str) -> list[str]:
     if priority_method not in METODOS_ANEEL_SUPORTADOS:
         priority_method = METODO_ANEEL_PADRAO
 
-    return [priority_method, *[m for m in METODOS_ANEEL_SUPORTADOS if m != priority_method]]
+    return [priority_method]
 
 
 def normalizar_metodo_aneel(priority_method: object) -> str:

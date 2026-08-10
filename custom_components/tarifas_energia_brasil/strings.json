@@ -8,7 +8,6 @@
           "concessionaria": "Concessionaria",
           "dia_leitura_reset_mensal": "Dia de leitura/reset mensal",
           "frequencia_atualizacao_horas": "Frequencia de atualizacao (horas)",
-          "multiplicador_fallback_csv": "Multiplicador do fallback CSV",
           "meio_prioritario_aneel": "Meio prioritario de acesso ANEEL",
           "entidade_consumo_kwh": "Entidade de consumo acumulado (kWh)",
           "entidade_geracao_kwh": "Entidade de geracao acumulada (kWh)",
@@ -35,7 +34,6 @@
           "concessionaria": "Concessionaria",
           "dia_leitura_reset_mensal": "Dia de leitura/reset mensal",
           "frequencia_atualizacao_horas": "Frequencia de atualizacao (horas)",
-          "multiplicador_fallback_csv": "Multiplicador do fallback CSV",
           "meio_prioritario_aneel": "Meio prioritario de acesso ANEEL",
           "entidade_consumo_kwh": "Entidade de consumo acumulado (kWh)",
           "entidade_geracao_kwh": "Entidade de geracao acumulada (kWh)",
@@ -58,5 +56,9 @@
     "error": {
       "tipo_fornecimento_obrigatorio": "Informe tipo de fornecimento quando houver entidade de geracao."
     }
+  },
+  "services": {
+    "atualizar_via_csv": {"name": "Atualizar via CSV", "description": "Inicia uma coleta CSV manual em background."},
+    "cancelar_atualizacao_csv": {"name": "Cancelar atualizacao CSV", "description": "Cancela a coleta CSV manual ativa."}
   }
 }

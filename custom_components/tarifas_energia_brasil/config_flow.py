@@ -1,5 +1,6 @@
-"""Versao: 0.1.0
+"""Versao: 0.2.0
 Criado em: 2026-04-22 21:41:36 -03:00
+Alterado em: 2026-08-10 (America/Sao_Paulo)
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -23,7 +24,6 @@ from .const import (
     CONF_HABILITAR_GRUPO_TARIFA_BRANCA,
     CONF_HORAS_ATUALIZACAO,
     CONF_METODO_ANEEL,
-    CONF_MULTIPLICADOR_FALLBACK_CSV,
     CONF_QUEBRAS_CALCULO,
     CONF_TB_FERIADOS_EXTRAS,
     CONF_TB_INTERMEDIARIO1_FIM,
@@ -45,7 +45,6 @@ from .const import (
     atributos_extras_habilitados,
     grupo_geracao_habilitado,
     grupo_tarifa_branca_habilitado,
-    multiplicador_fallback_csv,
     normalizar_metodo_aneel,
     obter_concessionarias_suportadas_para_fluxo,
 )
@@ -55,7 +54,7 @@ from .tarifa_branca_time import obter_janelas_padrao_tarifa_branca
 class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Fluxo inicial da integracao no Home Assistant."""
 
-    VERSION = 1
+    VERSION = 2
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         """Passo unico do fluxo de configuracao inicial."""
@@ -117,17 +116,6 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 selector.NumberSelectorConfig(
                     min=1,
                     max=168,
-                    step=1,
-                    mode=selector.NumberSelectorMode.BOX,
-                )
-            ),
-            vol.Required(
-                CONF_MULTIPLICADOR_FALLBACK_CSV,
-                default=multiplicador_fallback_csv(defaults),
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=1,
-                    max=30,
                     step=1,
                     mode=selector.NumberSelectorMode.BOX,
                 )
@@ -257,7 +245,7 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         normalized[CONF_METODO_ANEEL] = normalizar_metodo_aneel(
             normalized.get(CONF_METODO_ANEEL, METODO_ANEEL_PADRAO)
         )
-        normalized[CONF_MULTIPLICADOR_FALLBACK_CSV] = multiplicador_fallback_csv(normalized)
+        normalized.pop("multiplicador_fallback_csv", None)
         normalized[CONF_HABILITAR_ATRIBUTOS_EXTRAS] = atributos_extras_habilitados(normalized)
         normalized[CONF_HABILITAR_GRUPO_TARIFA_BRANCA] = normalized.get(
             CONF_HABILITAR_GRUPO_TARIFA_BRANCA,

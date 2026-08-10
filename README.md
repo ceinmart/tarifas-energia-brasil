@@ -49,10 +49,7 @@ Campos da configuracao inicial:
 - `Concessionaria` (somente suportadas).
 - `Dia de leitura/reset mensal` (padrao `1`).
 - `Frequencia de atualizacao` em horas (padrao `24`).
-- `Meio prioritario de acesso ANEEL`:
-  - `datastore_search`
-  - `datastore_search_sql`
-  - `csv_xml`
+- `Meio de acesso ANEEL`: `datastore_search`.
 - `Entidade de consumo acumulado em kWh` (obrigatoria).
 - `Entidade de geracao acumulada em kWh` (opcional).
 - `Entidade de energia injetada acumulada em kWh` (opcional, recomendada para SCEE e auto-consumo preciso).
@@ -173,17 +170,17 @@ Exemplos basicos:
   - `e8717aa8-2521-453f-bf16-fbb9a16eea39`, `a4060165-3a0c-404f-926c-83901088b67c`, `70ac08d1-53fc-4ceb-9c22-3a3a2c70e9fa` (Fio B multi-ano)
   - `0591b8f6-fe54-437b-b72b-1aa2efd46e42` (acionamento de bandeiras)
   - `5879ca80-b3bd-45b1-a135-d9b77c1d5b36` (adicional de bandeiras)
-- Alternativos:
-  - `datastore_search_sql`
-  - `csv_xml` (resource_show + download CSV/XML)
+- Alternativo automatico exclusivo do Fio B: Parquet anual (limite de 100 MiB).
+- CSV e usado somente pelas actions manuais `atualizar_via_csv` e
+  `cancelar_atualizacao_csv`. O processamento e feito em streaming e pode ser cancelado.
 
 ## Frequencia de chamadas e alternativo
 
 - A frequencia e controlada em horas pelo usuario (`padrao: 24`).
-- Fluxo de tentativa:
-  1. Metodo prioritario escolhido pelo usuario.
-  2. Metodos restantes em alternativo automatico.
-  3. Em falha geral, manter ultimo valor valido.
+- Fluxo automatico: tarifas e bandeira usam somente `datastore_search`; Fio B usa
+  `datastore_search` e, em falha, Parquet.
+- A action CSV retorna imediatamente e aceita `tarifas`, `fio_b`, `bandeira` ou `todos`.
+- Em falha geral ou cancelamento, o ultimo snapshot valido e mantido.
 - Nenhuma falha externa deve zerar sensor que ja tinha valor valido.
 
 ## Persistencia de creditos SCEE (60 meses)

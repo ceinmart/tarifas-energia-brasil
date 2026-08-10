@@ -13,7 +13,7 @@ A integracao usa `DataUpdateCoordinator` para centralizar:
 
 - `custom_components/tarifas_energia_brasil/const.py`: constantes e catalogos.
 - `config_flow.py`: configuracao inicial e opcoes.
-- `aneel_client.py`: consultas CKAN (`datastore_search`, `datastore_search_sql`, `csv_xml`).
+- `aneel_client.py`: DataStore, Parquet local via DuckDB e CSV manual em streaming.
 - `tributos/__init__.py`: extratores de tributos.
 - `calculators.py`: formulas de tarifa, tributos, Fio B e SCEE.
 - `coordinator.py`: ciclo de atualizacao e geracao de resultado.
@@ -30,3 +30,7 @@ A integracao usa `DataUpdateCoordinator` para centralizar:
 6. Registro de creditos SCEE e atualizado por competencia mensal com expiracao de 60 meses.
 7. Resultado final alimenta sensores.
 8. Em falha externa, ultimo resultado valido e mantido.
+
+O fallback automatico Parquet existe apenas para Fio B. A coleta CSV e iniciada por
+action, roda em background, admite uma tarefa por entrada e so publica o snapshot
+depois que todas as coletas do ciclo terminam.

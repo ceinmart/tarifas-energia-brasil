@@ -247,7 +247,7 @@ def test_config_flow_create_entry_success():
     assert result["data"][CONF_HABILITAR_GRUPO_GERACAO] is True
     assert result["data"][CONF_HABILITAR_GRUPO_TARIFA_BRANCA] is False
     assert result["data"][CONF_HABILITAR_ATRIBUTOS_EXTRAS] is False
-    assert result["data"][CONF_MULTIPLICADOR_FALLBACK_CSV] == MULTIPLICADOR_FALLBACK_CSV_PADRAO
+    assert CONF_MULTIPLICADOR_FALLBACK_CSV not in result["data"]
 
 
 def test_options_flow_requires_tipo_fornecimento_when_generation_set():
@@ -336,10 +336,7 @@ def test_config_flow_uses_number_box_for_reading_day_and_update_hours():
     assert fields[CONF_DIA_LEITURA].config.mode == number_mode.BOX
     assert isinstance(fields[CONF_HORAS_ATUALIZACAO], number_selector)
     assert fields[CONF_HORAS_ATUALIZACAO].config.mode == number_mode.BOX
-    assert isinstance(fields[CONF_MULTIPLICADOR_FALLBACK_CSV], number_selector)
-    assert fields[CONF_MULTIPLICADOR_FALLBACK_CSV].config.mode == number_mode.BOX
-    assert fields[CONF_MULTIPLICADOR_FALLBACK_CSV].config.min == 1
-    assert fields[CONF_MULTIPLICADOR_FALLBACK_CSV].config.max == 30
+    assert CONF_MULTIPLICADOR_FALLBACK_CSV not in fields
 
 
 def test_config_flow_does_not_offer_legacy_sql_method():
