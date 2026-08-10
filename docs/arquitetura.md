@@ -13,7 +13,7 @@ A integracao usa `DataUpdateCoordinator` para centralizar:
 
 - `custom_components/tarifas_energia_brasil/const.py`: constantes e catalogos.
 - `config_flow.py`: configuracao inicial e opcoes.
-- `aneel_client.py`: DataStore, Parquet local via DuckDB e CSV manual em streaming.
+- `aneel_client.py`: DataStore, Parquet local via DuckDB/PyArrow e CSV manual em streaming.
 - `tributos/__init__.py`: extratores de tributos.
 - `calculators.py`: formulas de tarifa, tributos, Fio B e SCEE.
 - `coordinator.py`: ciclo de atualizacao e geracao de resultado.

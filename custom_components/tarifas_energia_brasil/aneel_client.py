@@ -1,6 +1,6 @@
-"""Versao: 0.2.0
+"""Versao: 0.2.1
 Criado em: 2026-04-22 21:41:36 -03:00
-Alterado em: 2026-08-10 (America/Sao_Paulo)
+Alterado em: 2026-08-10 15:50 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import codecs
 import csv
+import importlib
 import json
 import logging
 import os
@@ -547,9 +548,40 @@ class AneelClient:
         path: str,
         filters: dict[str, Any] | None,
     ) -> list[dict[str, Any]]:
-        """Consulta um arquivo Parquet local com DuckDB."""
+        """Consulta Parquet priorizando DuckDB e usando PyArrow como fallback."""
 
-        import duckdb
+        errors: list[str] = []
+        try:
+            duckdb = importlib.import_module("duckdb")
+            records = AneelClient._query_parquet_duckdb_sync(duckdb, path, filters)
+            _LOGGER.info("ANEEL Parquet processado com engine=duckdb")
+            return records
+        except Exception as err:
+            errors.append(f"duckdb: {AneelClient._describe_exception(err)}")
+            _LOGGER.warning(
+                "ANEEL Parquet trocando engine duckdb por pyarrow: erro=%s",
+                AneelClient._describe_exception(err),
+            )
+
+        try:
+            parquet = importlib.import_module("pyarrow.parquet")
+            records = AneelClient._query_parquet_pyarrow_sync(parquet, path, filters)
+            _LOGGER.info("ANEEL Parquet processado com engine=pyarrow")
+            return records
+        except Exception as err:
+            errors.append(f"pyarrow: {AneelClient._describe_exception(err)}")
+            raise AneelClientError(
+                "Nenhum engine Parquet ficou disponivel. Use a action CSV manual. "
+                f"Erros: {' | '.join(errors)}"
+            ) from err
+
+    @staticmethod
+    def _query_parquet_duckdb_sync(
+        duckdb: Any,
+        path: str,
+        filters: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        """Executa a consulta local usando uma instalacao DuckDB existente."""
 
         connection = duckdb.connect(":memory:")
         try:
@@ -568,6 +600,21 @@ class AneelClient:
             return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
         finally:
             connection.close()
+
+    @staticmethod
+    def _query_parquet_pyarrow_sync(
+        parquet: Any,
+        path: str,
+        filters: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        """Executa a consulta local usando PyArrow com filtros pushdown."""
+
+        arrow_filters = [
+            (key, "=", value)
+            for key, value in (filters or {}).items()
+        ]
+        table = parquet.read_table(path, filters=arrow_filters or None)
+        return table.to_pylist()
 
     @staticmethod
     def _query_parquet_sync(
