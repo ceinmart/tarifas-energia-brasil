@@ -1,5 +1,6 @@
-"""Versao: 0.1.0
+"""Versao: 0.2.0
 Criado em: 2026-04-22 21:41:36 -03:00
+Alterado em: 2026-08-10 (America/Sao_Paulo)
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -9,21 +10,98 @@ from __future__ import annotations
 import asyncio
 import logging
 
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 
-from .const import CONF_HORAS_ATUALIZACAO, DOMAIN, HORAS_ATUALIZACAO_PADRAO, PLATFORMS
+from .const import (
+    CONF_HORAS_ATUALIZACAO,
+    CONF_METODO_ANEEL,
+    CONF_MULTIPLICADOR_FALLBACK_CSV,
+    DOMAIN,
+    HORAS_ATUALIZACAO_PADRAO,
+    METODO_ANEEL_CSV_XML,
+    METODO_ANEEL_PADRAO,
+    PLATFORMS,
+)
 from .coordinator import TarifasEnergiaBrasilCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+SERVICE_UPDATE_CSV = "atualizar_via_csv"
+SERVICE_CANCEL_CSV = "cancelar_atualizacao_csv"
+ATTR_CONFIG_ENTRY_ID = "config_entry_id"
+ATTR_DATASET = "dataset"
+CSV_DATASETS = ("tarifas", "fio_b", "bandeira", "todos")
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Configura integracao via UI; YAML nao e utilizado."""
 
     hass.data.setdefault(DOMAIN, {})
+    async def _update_csv(call: object) -> None:
+        coordinator = _coordinator_from_call(hass, call)
+        try:
+            coordinator.start_manual_csv_update(call.data[ATTR_DATASET])
+        except RuntimeError as err:
+            raise ServiceValidationError(str(err)) from err
+
+    async def _cancel_csv(call: object) -> None:
+        coordinator = _coordinator_from_call(hass, call)
+        if not coordinator.cancel_manual_csv_update():
+            raise ServiceValidationError("Nao existe atualizacao CSV ativa para esta entrada.")
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_UPDATE_CSV,
+        _update_csv,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string,
+                vol.Required(ATTR_DATASET): vol.In(CSV_DATASETS),
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CANCEL_CSV,
+        _cancel_csv,
+        schema=vol.Schema({vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string}),
+    )
+    return True
+
+
+def _coordinator_from_call(
+    hass: HomeAssistant, call: object
+) -> TarifasEnergiaBrasilCoordinator:
+    """Resolve a entrada explicitamente informada pela action."""
+
+    entry_id = call.data[ATTR_CONFIG_ENTRY_ID]  # type: ignore[attr-defined]
+    coordinator = hass.data.get(DOMAIN, {}).get(entry_id)
+    if coordinator is None:
+        raise ServiceValidationError(f"Entrada de configuracao nao encontrada: {entry_id}")
+    return coordinator
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migra prioridade CSV legada e remove a opcao de multiplicador obsoleta."""
+
+    if entry.version >= 2:
+        return True
+    data = dict(entry.data)
+    options = dict(entry.options)
+    for payload in (data, options):
+        if payload.get(CONF_METODO_ANEEL) == METODO_ANEEL_CSV_XML:
+            payload[CONF_METODO_ANEEL] = METODO_ANEEL_PADRAO
+        payload.pop(CONF_MULTIPLICADOR_FALLBACK_CSV, None)
+    hass.config_entries.async_update_entry(
+        entry,
+        data=data,
+        options=options,
+        version=2,
+    )
     return True
 
 
@@ -76,6 +154,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.entry_id
     )
     if coordinator is not None:
+        await coordinator.async_cancel_manual_csv_update()
         await coordinator.async_stop_state_tracking()
         await coordinator.async_persist_state()
 

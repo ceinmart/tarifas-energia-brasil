@@ -1,5 +1,6 @@
-"""Versao: 0.1.0
+"""Versao: 0.2.0
 Criado em: 2026-04-22 21:41:36 -03:00
+Alterado em: 2026-08-10 (America/Sao_Paulo)
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -10,9 +11,11 @@ import codecs
 import csv
 import json
 import logging
+import os
+import tempfile
 import time
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -24,20 +27,23 @@ from .const import (
     ATTR_CONFIANCA_MEDIA,
     METODO_ANEEL_BUSCA_DADOS,
     METODO_ANEEL_BUSCA_DADOS_SQL,
-    METODO_ANEEL_CSV_XML,
-    obter_ordem_alternativa_metodo_aneel,
+    METODO_ANEEL_CSV_MANUAL,
+    METODO_ANEEL_PARQUET,
+    obter_ordem_alternativa_metodo_aneel,  # noqa: F401 - compatibilidade publica
 )
 from .models import MetadadosColeta
 
 _LOGGER = logging.getLogger(__name__)
 
 ANEEL_JSON_TIMEOUT_SECONDS = 120
-ANEEL_CSV_TIMEOUT_SECONDS = 600
+# Mantido como alias legado para consumidores externos; nao e mais timeout total.
+ANEEL_CSV_TIMEOUT_SECONDS = ANEEL_SOCK_READ_TIMEOUT_SECONDS = 120
+ANEEL_CONNECT_TIMEOUT_SECONDS = 30
 CSV_STREAM_CHUNK_SIZE = 64 * 1024
 CSV_STREAM_ENCODING = "latin-1"
-CSV_PROGRESS_LOG_INTERVAL_SECONDS = 60
-CSV_PROGRESS_LOG_INTERVAL_BYTES = 100 * 1024 * 1024
-CSV_MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024
+CSV_PROGRESS_LOG_INTERVAL_SECONDS = 30
+CSV_PROGRESS_LOG_INTERVAL_BYTES = 25 * 1024 * 1024
+PARQUET_MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
 DATASTORE_SEARCH_PAGE_LIMIT = 1000
 
 
@@ -58,11 +64,21 @@ class AneelClient:
         "a4060165-3a0c-404f-926c-83901088b67c",  # 2025
         "70ac08d1-53fc-4ceb-9c22-3a3a2c70e9fa",  # 2024
     )
+    RESOURCE_FIO_B_PARQUET_ANOS = (
+        "59c32c89-8e86-4122-a7cf-a0d5fa9d0ff5",  # 2026
+        "2a7a5364-8bd7-4464-9c56-587d77329447",  # 2025
+        "5a29d53f-b7a6-4436-8497-7de00214d8fb",  # 2024
+    )
 
-    def __init__(self, session: aiohttp.ClientSession) -> None:
+    def __init__(
+        self,
+        session: aiohttp.ClientSession,
+        executor_job: Callable[..., Awaitable[Any]] | None = None,
+    ) -> None:
         """Inicializa cliente com sessao HTTP externa."""
 
         self._session = session
+        self._executor_job = executor_job
 
     async def fetch_tarifas(
         self,
@@ -70,25 +86,15 @@ class AneelClient:
         priority_method: str,
         reference_date: date,
         *,
-        csv_fallback_allowed: bool = True,
-        csv_fallback_attempt_callback: Callable[[str], None] | None = None,
+        manual_csv: bool = False,
     ) -> tuple[dict[str, Any], MetadadosColeta]:
         """Coleta TE/TUSD convencional e branca em chamada otimizada."""
 
         errors: list[str] = []
-        methods = self._methods_for_request(
-            priority_method,
-            csv_fallback_allowed=csv_fallback_allowed,
-            errors=errors,
-        )
+        methods = [METODO_ANEEL_CSV_MANUAL] if manual_csv else [METODO_ANEEL_BUSCA_DADOS]
         filters = {"SigAgente": concessionaria}
         for attempts, method in enumerate(methods, start=1):
             try:
-                self._mark_csv_attempt(
-                    "tarifas",
-                    method=method,
-                    callback=csv_fallback_attempt_callback,
-                )
                 records = await self._collect_resource_records(
                     resource_id=self.RESOURCE_TARIFAS,
                     method=method,
@@ -145,16 +151,15 @@ class AneelClient:
         priority_method: str,
         reference_date: date,
         *,
-        csv_fallback_allowed: bool = True,
-        csv_fallback_attempt_callback: Callable[[str], None] | None = None,
+        manual_csv: bool = False,
     ) -> tuple[dict[str, Any], MetadadosColeta]:
         """Coleta componente TUSD_FioB considerando recursos de anos diferentes."""
 
         errors: list[str] = []
-        methods = self._methods_for_request(
-            priority_method,
-            csv_fallback_allowed=csv_fallback_allowed,
-            errors=errors,
+        methods = (
+            [METODO_ANEEL_CSV_MANUAL]
+            if manual_csv
+            else [METODO_ANEEL_BUSCA_DADOS, METODO_ANEEL_PARQUET]
         )
         filters = {
             "SigNomeAgente": concessionaria,
@@ -162,15 +167,15 @@ class AneelClient:
         }
         for attempts, method in enumerate(methods, start=1):
             try:
-                self._mark_csv_attempt(
-                    "fio_b",
-                    method=method,
-                    callback=csv_fallback_attempt_callback,
-                )
                 all_records: list[dict[str, Any]] = []
                 resource_errors: list[str] = []
                 checked_resource_ids: list[str] = []
-                for resource_id in self.RESOURCE_FIO_B_ANOS:
+                resource_ids = (
+                    self.RESOURCE_FIO_B_PARQUET_ANOS
+                    if method == METODO_ANEEL_PARQUET
+                    else self.RESOURCE_FIO_B_ANOS
+                )
+                for resource_id in resource_ids:
                     try:
                         records = await self._collect_resource_records(
                             resource_id=resource_id,
@@ -181,7 +186,7 @@ class AneelClient:
                                     concessionaria,
                                     reference_date,
                                 )
-                                if method == METODO_ANEEL_CSV_XML
+                                if method == METODO_ANEEL_CSV_MANUAL
                                 else None
                             ),
                         )
@@ -256,24 +261,14 @@ class AneelClient:
         priority_method: str,
         reference_date: date,
         *,
-        csv_fallback_allowed: bool = True,
-        csv_fallback_attempt_callback: Callable[[str], None] | None = None,
+        manual_csv: bool = False,
     ) -> tuple[dict[str, Any], MetadadosColeta]:
         """Coleta bandeira vigente e adicional homologado."""
 
         errors: list[str] = []
-        methods = self._methods_for_request(
-            priority_method,
-            csv_fallback_allowed=csv_fallback_allowed,
-            errors=errors,
-        )
+        methods = [METODO_ANEEL_CSV_MANUAL] if manual_csv else [METODO_ANEEL_BUSCA_DADOS]
         for attempts, method in enumerate(methods, start=1):
             try:
-                self._mark_csv_attempt(
-                    "bandeira",
-                    method=method,
-                    callback=csv_fallback_attempt_callback,
-                )
                 acionamentos = await self._collect_resource_records(
                     resource_id=self.RESOURCE_BANDEIRAS_ACIONAMENTO,
                     method=method,
@@ -353,8 +348,10 @@ class AneelClient:
             raise AneelClientError(
                 "Metodo ANEEL legado indisponivel no CKAN atual: datastore_search_sql."
             )
-        if method == METODO_ANEEL_CSV_XML:
+        if method == METODO_ANEEL_CSV_MANUAL:
             return await self._csv_xml_records(resource_id, filters, early_stop=early_stop)
+        if method == METODO_ANEEL_PARQUET:
+            return await self._parquet_records(resource_id, filters)
         raise AneelClientError(f"Metodo ANEEL invalido: {method}")
 
     async def _datastore_search_records(
@@ -427,29 +424,31 @@ class AneelClient:
             raise AneelClientError(f"URL do recurso nao encontrada para {resource_id}.")
 
         _LOGGER.warning(
-            "ANEEL CSV download iniciado: resource_id=%s; url=%s; timeout=%ss; filtros=%s",
+            "ANEEL fallback CSV manual ativado: resource_id=%s; filtros=%s",
+            resource_id,
+            self._format_filters(filters),
+        )
+        _LOGGER.info(
+            "ANEEL CSV manual iniciado: resource_id=%s; url=%s; filtros=%s",
             resource_id,
             url,
-            ANEEL_CSV_TIMEOUT_SECONDS,
             self._format_filters(filters),
         )
         started_at = time.monotonic()
-        async with self._session.get(url, timeout=ANEEL_CSV_TIMEOUT_SECONDS) as response:
+        timeout = aiohttp.ClientTimeout(
+            total=None,
+            connect=ANEEL_CONNECT_TIMEOUT_SECONDS,
+            sock_read=ANEEL_SOCK_READ_TIMEOUT_SECONDS,
+        )
+        async with self._session.get(url, timeout=timeout) as response:
             response.raise_for_status()
             response_headers = getattr(response, "headers", None)
             content_length = response_headers.get("Content-Length") if response_headers else None
-            parsed_content_length = self._parse_content_length(content_length)
-            _LOGGER.warning(
+            _LOGGER.info(
                 "ANEEL CSV resposta recebida: resource_id=%s; content_length=%s",
                 resource_id,
                 content_length or "desconhecido",
             )
-            if parsed_content_length is not None and parsed_content_length > CSV_MAX_DOWNLOAD_BYTES:
-                raise AneelClientError(
-                    "CSV ANEEL excede o limite seguro para processamento no Home Assistant: "
-                    f"resource_id={resource_id}; tamanho={parsed_content_length}; "
-                    f"limite={CSV_MAX_DOWNLOAD_BYTES} bytes."
-                )
             records = await self._filtered_csv_records_from_response(
                 response,
                 filters,
@@ -457,13 +456,135 @@ class AneelClient:
                 early_stop=early_stop,
             )
         elapsed = time.monotonic() - started_at
-        _LOGGER.warning(
+        _LOGGER.info(
             "ANEEL CSV download finalizado: resource_id=%s; registros_filtrados=%s; tempo=%.1fs",
             resource_id,
             len(records),
             elapsed,
         )
         return records
+
+    async def _parquet_records(
+        self,
+        resource_id: str,
+        filters: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        """Baixa Parquet limitado e consulta o arquivo temporario fora do event loop."""
+
+        resource_payload = await self._request_json("resource_show", {"id": resource_id})
+        resource = resource_payload.get("result", {})
+        url = resource.get("url")
+        if not url:
+            raise AneelClientError(f"URL Parquet nao encontrada para {resource_id}.")
+        timeout = aiohttp.ClientTimeout(
+            total=None,
+            connect=ANEEL_CONNECT_TIMEOUT_SECONDS,
+            sock_read=ANEEL_SOCK_READ_TIMEOUT_SECONDS,
+        )
+        path = await self._run_blocking(self._create_parquet_temp_sync)
+        downloaded = 0
+        write_buffer = bytearray()
+        try:
+            async with self._session.get(url, timeout=timeout) as response:
+                response.raise_for_status()
+                length = self._parse_content_length(
+                    getattr(response, "headers", {}).get("Content-Length")
+                )
+                if length is not None and length > PARQUET_MAX_DOWNLOAD_BYTES:
+                    raise AneelClientError(
+                        f"Parquet excede 100 MiB: resource_id={resource_id}; tamanho={length}."
+                    )
+                async for chunk in response.content.iter_chunked(CSV_STREAM_CHUNK_SIZE):
+                    downloaded += len(chunk)
+                    if downloaded > PARQUET_MAX_DOWNLOAD_BYTES:
+                        raise AneelClientError(
+                            "Parquet excedeu 100 MiB durante download: "
+                            f"resource_id={resource_id}."
+                        )
+                    write_buffer.extend(chunk)
+                    if len(write_buffer) >= 1024 * 1024:
+                        await self._run_blocking(
+                            self._append_parquet_temp_sync, path, bytes(write_buffer)
+                        )
+                        write_buffer.clear()
+            if write_buffer:
+                await self._run_blocking(
+                    self._append_parquet_temp_sync, path, bytes(write_buffer)
+                )
+            return await self._run_blocking(self._query_parquet_file_sync, path, filters)
+        finally:
+            await self._run_blocking(self._remove_parquet_temp_sync, path)
+
+    async def _run_blocking(self, target: Callable[..., Any], *args: Any) -> Any:
+        """Executa I/O de arquivo e DuckDB fora do event loop do Home Assistant."""
+
+        if self._executor_job is not None:
+            return await self._executor_job(target, *args)
+        import asyncio
+
+        return await asyncio.to_thread(target, *args)
+
+    @staticmethod
+    def _create_parquet_temp_sync() -> str:
+        descriptor, path = tempfile.mkstemp(suffix=".parquet")
+        os.close(descriptor)
+        return path
+
+    @staticmethod
+    def _append_parquet_temp_sync(path: str, payload: bytes) -> None:
+        with open(path, "ab") as handle:
+            handle.write(payload)
+
+    @staticmethod
+    def _remove_parquet_temp_sync(path: str) -> None:
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+
+    @staticmethod
+    def _query_parquet_file_sync(
+        path: str,
+        filters: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        """Consulta um arquivo Parquet local com DuckDB."""
+
+        import duckdb
+
+        connection = duckdb.connect(":memory:")
+        try:
+            query = "SELECT * FROM read_parquet(?)"
+            params: list[Any] = [path]
+            if filters:
+                clauses = []
+                for key, value in filters.items():
+                    if not key.replace("_", "").isalnum():
+                        raise AneelClientError(f"Campo Parquet invalido: {key}")
+                    clauses.append(f'"{key}" = ?')
+                    params.append(value)
+                query += " WHERE " + " AND ".join(clauses)
+            cursor = connection.execute(query, params)
+            columns = [item[0] for item in cursor.description]
+            return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
+        finally:
+            connection.close()
+
+    @staticmethod
+    def _query_parquet_sync(
+        payload: bytes,
+        filters: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
+        """Consulta Parquet com DuckDB e sempre remove o temporario."""
+
+        path = ""
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as handle:
+                path = handle.name
+                handle.write(payload)
+            return AneelClient._query_parquet_file_sync(path, filters)
+        finally:
+            if path:
+                os.unlink(path)
 
     @staticmethod
     def _parse_content_length(value: Any) -> int | None:
@@ -500,34 +621,6 @@ class AneelClient:
             raise AneelClientError(f"Resposta CKAN sem sucesso para {action}: {detail}.")
         return payload
 
-    @staticmethod
-    def _methods_for_request(
-        priority_method: str,
-        *,
-        csv_fallback_allowed: bool,
-        errors: list[str],
-    ) -> list[str]:
-        """Monta a ordem efetiva respeitando bloqueio temporario do CSV."""
-
-        methods = obter_ordem_alternativa_metodo_aneel(priority_method)
-        if csv_fallback_allowed:
-            return methods
-        if METODO_ANEEL_CSV_XML in methods:
-            errors.append("csv_xml: fallback CSV bloqueado pela cadencia configurada")
-        return [method for method in methods if method != METODO_ANEEL_CSV_XML]
-
-    @staticmethod
-    def _mark_csv_attempt(
-        dataset_key: str,
-        *,
-        method: str,
-        callback: Callable[[str], None] | None,
-    ) -> None:
-        """Notifica o coordinator antes de iniciar um download CSV."""
-
-        if method == METODO_ANEEL_CSV_XML and callback is not None:
-            callback(dataset_key)
-
     async def _filtered_csv_records_from_response(
         self,
         response: Any,
@@ -559,7 +652,7 @@ class AneelClient:
                 records.append(row_dict)
                 if early_stop and early_stop(records):
                     if resource_id:
-                        _LOGGER.warning(
+                        _LOGGER.info(
                             (
                                 "ANEEL CSV leitura interrompida apos criterio "
                                 "suficiente: resource_id=%s; linhas_lidas=%s; "
@@ -572,7 +665,7 @@ class AneelClient:
                         )
                     return records
         if resource_id:
-            _LOGGER.warning(
+            _LOGGER.info(
                 (
                     "ANEEL CSV parse finalizado: resource_id=%s; linhas_lidas=%s; "
                     "registros_filtrados=%s; filtros=%s"
@@ -600,18 +693,12 @@ class AneelClient:
         last_log_bytes = 0
         async for chunk in response.content.iter_chunked(CSV_STREAM_CHUNK_SIZE):
             bytes_read += len(chunk)
-            if bytes_read > CSV_MAX_DOWNLOAD_BYTES:
-                raise AneelClientError(
-                    "CSV ANEEL excedeu o limite seguro durante o streaming: "
-                    f"resource_id={resource_id or 'desconhecido'}; "
-                    f"limite={CSV_MAX_DOWNLOAD_BYTES} bytes."
-                )
             now = time.monotonic()
             if resource_id and (
                 now - last_log_at >= CSV_PROGRESS_LOG_INTERVAL_SECONDS
                 or bytes_read - last_log_bytes >= CSV_PROGRESS_LOG_INTERVAL_BYTES
             ):
-                _LOGGER.warning(
+                _LOGGER.info(
                     "ANEEL CSV download em andamento: resource_id=%s; bytes_baixados=%s",
                     resource_id,
                     bytes_read,
@@ -633,7 +720,7 @@ class AneelClient:
             for parsed in csv.reader([buffer], delimiter=delimiter or ","):
                 yield parsed
         if resource_id:
-            _LOGGER.warning(
+            _LOGGER.info(
                 "ANEEL CSV stream concluido: resource_id=%s; bytes_baixados=%s",
                 resource_id,
                 bytes_read,
@@ -720,7 +807,8 @@ class AneelClient:
             )
             return
 
-        _LOGGER.error(
+        logger = _LOGGER.warning if method == METODO_ANEEL_PARQUET else _LOGGER.error
+        logger(
             "ANEEL metodo final falhou para %s: metodo=%s; filtros=%s; erro=%s",
             dataset,
             method,

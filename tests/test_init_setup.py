@@ -19,6 +19,7 @@ def _install_homeassistant_stub() -> None:
     homeassistant = types.ModuleType("homeassistant")
     config_entries = types.ModuleType("homeassistant.config_entries")
     core = types.ModuleType("homeassistant.core")
+    exceptions = types.ModuleType("homeassistant.exceptions")
     helpers = types.ModuleType("homeassistant.helpers")
     config_validation = types.ModuleType("homeassistant.helpers.config_validation")
 
@@ -28,8 +29,12 @@ def _install_homeassistant_stub() -> None:
     class HomeAssistant:
         pass
 
+    class ServiceValidationError(Exception):
+        pass
+
     config_entries.ConfigEntry = ConfigEntry
     core.HomeAssistant = HomeAssistant
+    exceptions.ServiceValidationError = ServiceValidationError
     config_validation.config_entry_only_config_schema = lambda domain: {"domain": domain}
 
     homeassistant.config_entries = config_entries
@@ -40,6 +45,7 @@ def _install_homeassistant_stub() -> None:
     sys.modules["homeassistant"] = homeassistant
     sys.modules["homeassistant.config_entries"] = config_entries
     sys.modules["homeassistant.core"] = core
+    sys.modules["homeassistant.exceptions"] = exceptions
     sys.modules["homeassistant.helpers"] = helpers
     sys.modules["homeassistant.helpers.config_validation"] = config_validation
 
@@ -53,9 +59,13 @@ def _load_init_module():
 
     const_module = types.ModuleType(f"{package_name}.const")
     const_module.CONF_HORAS_ATUALIZACAO = "frequencia_atualizacao_horas"
+    const_module.CONF_METODO_ANEEL = "meio_prioritario_aneel"
+    const_module.CONF_MULTIPLICADOR_FALLBACK_CSV = "multiplicador_fallback_csv"
     const_module.HORAS_ATUALIZACAO_PADRAO = 24
     const_module.DOMAIN = "tarifas_energia_brasil"
     const_module.PLATFORMS = ["sensor"]
+    const_module.METODO_ANEEL_CSV_XML = "csv_xml"
+    const_module.METODO_ANEEL_PADRAO = "datastore_search"
     sys.modules[f"{package_name}.const"] = const_module
 
     coordinator_module = types.ModuleType(f"{package_name}.coordinator")

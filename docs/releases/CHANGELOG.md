@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-08-10
+
+### Alterado
+
+- O ciclo automatico usa `datastore_search` e somente o Fio B pode recorrer ao
+  Parquet anual, consultado localmente com DuckDB e limitado a 100 MiB.
+- O CSV deixou de ser fallback automatico e passou a ser uma atualizacao manual
+  em background, por dataset, sem limite total de tamanho e com progresso em log.
+- Foram adicionadas actions para iniciar e cancelar a coleta CSV; cancelamentos e
+  falhas preservam o ultimo snapshot completo.
+- A opcao de multiplicador CSV foi removida e entradas legadas sao migradas.
+
 ## 0.1.11 - 2026-08-06
 
 ### Corrigido

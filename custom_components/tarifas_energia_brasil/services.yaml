@@ -1,0 +1,39 @@
+# Versao: 1.0.0
+# Criado em: 2026-08-10 (America/Sao_Paulo)
+# Criado por: Codex
+# Finalidade: Actions publicas para coleta CSV manual cancelavel.
+
+atualizar_via_csv:
+  name: Atualizar via CSV
+  description: Inicia em background uma coleta manual via CSV da ANEEL.
+  fields:
+    config_entry_id:
+      name: Entrada de configuracao
+      description: ID da entrada da integracao que sera atualizada.
+      required: true
+      selector:
+        config_entry:
+          integration: tarifas_energia_brasil
+    dataset:
+      name: Dataset
+      description: Dados que devem ser coletados obrigatoriamente por CSV.
+      required: true
+      selector:
+        select:
+          options:
+            - tarifas
+            - fio_b
+            - bandeira
+            - todos
+
+cancelar_atualizacao_csv:
+  name: Cancelar atualizacao CSV
+  description: Cancela a coleta CSV manual ativa e descarta resultados parciais.
+  fields:
+    config_entry_id:
+      name: Entrada de configuracao
+      description: ID da entrada cuja coleta sera cancelada.
+      required: true
+      selector:
+        config_entry:
+          integration: tarifas_energia_brasil

@@ -1,5 +1,6 @@
-"""Versao: 0.1.0
+"""Versao: 0.2.0
 Criado em: 2026-04-22 21:41:36 -03:00
+Alterado em: 2026-08-10 (America/Sao_Paulo)
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -92,7 +93,10 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
 
         self.hass = hass
         self.entry = entry
-        self._aneel_client = AneelClient(async_get_clientsession(hass))
+        self._aneel_client = AneelClient(
+            async_get_clientsession(hass),
+            executor_job=hass.async_add_executor_job,
+        )
         self._state_store: Store[dict[str, Any]] = Store(
             hass=hass,
             version=_STATE_STORAGE_VERSION,
@@ -125,6 +129,8 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
         self._tarifa_branca_invalid_extra_holidays: list[str] = []
         self._unsub_state_listeners: list[Any] = []
         self._last_csv_fallback_attempts: dict[str, str] = {}
+        self._manual_csv_datasets: frozenset[str] = frozenset()
+        self._manual_csv_task: asyncio.Task[None] | None = None
 
         self._configured_update_interval = timedelta(hours=self._effective_update_hours())
 
@@ -1263,6 +1269,94 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
             }
         )
 
+    def start_manual_csv_update(self, dataset: str) -> None:
+        """Inicia uma coleta CSV manual em background para esta entrada."""
+
+        if self._manual_csv_task is not None and not self._manual_csv_task.done():
+            raise RuntimeError("Ja existe uma atualizacao CSV ativa para esta entrada.")
+        datasets = (
+            frozenset(("tarifas", "fio_b", "bandeira"))
+            if dataset == "todos"
+            else frozenset((dataset,))
+        )
+        self._manual_csv_task = self.hass.async_create_task(
+            self._run_manual_csv_update(datasets),
+            f"{DOMAIN}_{self.entry.entry_id}_csv_manual",
+        )
+
+    async def _run_manual_csv_update(self, datasets: frozenset[str]) -> None:
+        """Executa refresh atomico e descarta resultados quando cancelado."""
+
+        self._manual_csv_datasets = datasets
+        _LOGGER.warning(
+            "ANEEL fallback CSV manual ativado: config_entry_id=%s; datasets=%s",
+            self.entry.entry_id,
+            ",".join(sorted(datasets)),
+        )
+        try:
+            await self.async_refresh()
+            if not self.last_update_success:
+                raise RuntimeError("A coleta CSV manual nao produziu um snapshot valido.")
+            _LOGGER.info(
+                "ANEEL CSV manual concluido: config_entry_id=%s; datasets=%s",
+                self.entry.entry_id,
+                ",".join(sorted(datasets)),
+            )
+        except asyncio.CancelledError:
+            _LOGGER.info(
+                "ANEEL CSV manual cancelado; resultados parciais descartados: "
+                "config_entry_id=%s; datasets=%s",
+                self.entry.entry_id,
+                ",".join(sorted(datasets)),
+            )
+            raise
+        except Exception as err:
+            _LOGGER.error(
+                "ANEEL CSV manual encerrado com falha definitiva: "
+                "config_entry_id=%s; datasets=%s; erro=%s",
+                self.entry.entry_id,
+                ",".join(sorted(datasets)),
+                err,
+            )
+        finally:
+            self._manual_csv_datasets = frozenset()
+
+    def cancel_manual_csv_update(self) -> bool:
+        """Solicita cancelamento cooperativo da tarefa CSV ativa."""
+
+        if self._manual_csv_task is None or self._manual_csv_task.done():
+            return False
+        self._manual_csv_task.cancel()
+        return True
+
+    async def async_cancel_manual_csv_update(self) -> bool:
+        """Cancela e aguarda o fechamento da resposta HTTP ativa."""
+
+        task = self._manual_csv_task
+        if task is None or task.done():
+            return False
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        return True
+
+    @staticmethod
+    def _manual_csv_diagnostics(
+        datasets: frozenset[str], result: str
+    ) -> dict[str, Any] | None:
+        """Cria metadados compactos da execucao CSV manual."""
+
+        if not datasets:
+            return None
+        return {
+            "metodo": "csv_manual",
+            "horario": datetime.now().astimezone().isoformat(),
+            "dataset": sorted(datasets),
+            "resultado": result,
+        }
+
     async def _async_update_data(self) -> ResultadoCalculo:
         """Executa ciclo de coleta e retorna snapshot final dos sensores."""
 
@@ -1281,28 +1375,25 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
         injecao_entity = self._effective_value(CONF_ENTIDADE_INJECAO)
         tipo_fornecimento = self._effective_value(CONF_TIPO_FORNECIMENTO, FORNECIMENTO_MONOFASICO)
         possuia_historico_consumo = self._last_consumo_timestamp is not None
-        csv_allowed_by_dataset = self._csv_fallback_allowed_by_dataset(now)
+        manual_csv_datasets = self._manual_csv_datasets
 
         try:
             tarifas_task = self._aneel_client.fetch_tarifas(
                 concessionaria=concessionaria,
                 priority_method=prioridade,
                 reference_date=referencia,
-                csv_fallback_allowed=csv_allowed_by_dataset["tarifas"],
-                csv_fallback_attempt_callback=self._mark_csv_fallback_attempt,
+                manual_csv="tarifas" in manual_csv_datasets,
             )
             fio_b_task = self._aneel_client.fetch_fio_b(
                 concessionaria=concessionaria,
                 priority_method=prioridade,
                 reference_date=referencia,
-                csv_fallback_allowed=csv_allowed_by_dataset["fio_b"],
-                csv_fallback_attempt_callback=self._mark_csv_fallback_attempt,
+                manual_csv="fio_b" in manual_csv_datasets,
             )
             bandeira_task = self._aneel_client.fetch_bandeira(
                 priority_method=prioridade,
                 reference_date=referencia,
-                csv_fallback_allowed=csv_allowed_by_dataset["bandeira"],
-                csv_fallback_attempt_callback=self._mark_csv_fallback_attempt,
+                manual_csv="bandeira" in manual_csv_datasets,
             )
             tributos_task = extract_tributos(
                 session=async_get_clientsession(self.hass),
@@ -1341,12 +1432,22 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
                     retry_interval,
                     err,
                 )
+                if manual_csv_datasets:
+                    _LOGGER.error(
+                        "ANEEL CSV manual falhou; snapshot anterior preservado: "
+                        "config_entry_id=%s; datasets=%s; erro=%s",
+                        self.entry.entry_id,
+                        ",".join(sorted(manual_csv_datasets)),
+                        err,
+                    )
+                    raise UpdateFailed(f"Falha na coleta CSV manual: {err}") from err
                 diagnosticos = dict(self.data.diagnosticos)
                 diagnosticos["mensagem_erro"] = str(err)
                 diagnosticos["ultima_falha"] = now.isoformat()
                 diagnosticos["usou_ultimo_valor_valido"] = True
-                diagnosticos["csv_fallback_bloqueios"] = self._csv_fallback_diagnostics(now)
-                self._log_csv_fallback_blocks(csv_allowed_by_dataset, now)
+                diagnosticos["csv_manual"] = self._manual_csv_diagnostics(
+                    manual_csv_datasets, "falha"
+                )
                 self._schedule_state_save()
                 return ResultadoCalculo(
                     atualizado_em=now,
@@ -1366,7 +1467,6 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
                 retry_interval,
                 err,
             )
-            self._log_csv_fallback_blocks(csv_allowed_by_dataset, now)
             self._schedule_state_save()
             raise UpdateFailed(f"Falha na coleta inicial: {err}") from err
 
@@ -1553,7 +1653,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
             "icms_source": icms_source,
             "tarifas_selection_debug": tarifas_data.get("selection_debug"),
             "fio_b_selection_debug": fio_b_data.get("selection_debug"),
-            "csv_fallback_bloqueios": self._csv_fallback_diagnostics(now),
+            "csv_manual": self._manual_csv_diagnostics(manual_csv_datasets, "sucesso"),
             "saldo_creditos_disponiveis_kwh": saldo_creditos_disponiveis,
             "credito_consumido_estimado_atual_kwh": self._credito_consumido_estimado_atual_kwh,
             "credito_gerado_estimado_atual_kwh": self._credito_estimado_atual_kwh,
