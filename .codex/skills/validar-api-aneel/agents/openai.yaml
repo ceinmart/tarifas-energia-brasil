@@ -1,0 +1,4 @@
+interface:
+  display_name: "Validar API ANEEL"
+  short_description: "Revalida a compatibilidade da integração ANEEL"
+  default_prompt: "Use $validar-api-aneel para revalidar a API da ANEEL e a compatibilidade atual da integração."
