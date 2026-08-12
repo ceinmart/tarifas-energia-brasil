@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.2.2 - 2026-08-12
+
+### Corrigido
+
+- O processamento incremental limita intervalos a 32 dias. Lacunas maiores sao
+  reancoradas sem ratear um delta temporal nao confiavel, impedindo segmentacao
+  proporcional ao numero de dias dentro do callback do event loop.
+- Eventos com timestamp nao crescente deixam de retroceder a referencia persistida.
+- Eventos dos tres sensores sem mudanca numerica efetiva nao recalculam o snapshot,
+  nao persistem estado e nao notificam listeners.
+
+### Diagnostico
+
+- Contadores registram timestamps obsoletos e intervalos longos descartados; uma
+  lacuna longa tambem produz warning com a config entry afetada.
+
 ## 0.2.1 - 2026-08-10
 
 ### Corrigido

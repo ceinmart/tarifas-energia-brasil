@@ -1,5 +1,6 @@
-"""Versao: 0.1.0
+"""Versao: 0.2.2
 Criado em: 2026-04-23 17:20:00 -03:00
+Alterado em: 2026-08-12 (America/Sao_Paulo)
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -202,6 +203,8 @@ def _build_coordinator() -> object:
     coordinator._tarifa_branca_last_interval_seconds = 0.0
     coordinator._tarifa_branca_last_segment_count = 0
     coordinator._tarifa_branca_low_confidence = False
+    coordinator._incremental_stale_events = 0
+    coordinator._incremental_long_intervals = 0
     return coordinator
 
 
@@ -218,6 +221,85 @@ def test_prepare_delta_context_reinitializes_reference_when_sensor_resets():
     assert context["reset_detected"] is True
     assert context["raw_delta_kwh"] == pytest.approx(-988.67)
     assert context["delta_kwh"] == pytest.approx(0.0)
+
+
+def test_prepare_delta_context_rejects_non_increasing_timestamp():
+    coordinator = _build_coordinator()
+    last = datetime(2026, 8, 12, 9, 19, tzinfo=UTC)
+
+    context = coordinator._prepare_delta_context(101.0, last, 100.0, last)
+
+    assert context["stale_timestamp"] is True
+    assert context["delta_kwh"] == pytest.approx(0.0)
+
+
+def test_long_incremental_interval_is_bounded_without_segmentation(monkeypatch):
+    coordinator = _build_coordinator()
+    start = datetime(2020, 1, 1, tzinfo=UTC)
+    end = datetime(2026, 8, 12, tzinfo=UTC)
+    context = coordinator._prepare_delta_context(101.0, end, 100.0, start)
+    period_state = TarifasEnergiaBrasilCoordinator._new_period_state()
+
+    monkeypatch.setattr(
+        coordinator_module,
+        "split_interval_by_midnight",
+        lambda *_args: pytest.fail("intervalo longo nao deve ser segmentado"),
+    )
+    valores, _rollovers = coordinator._apply_scalar_delta_context(
+        period_state, end, reading_day=1, delta_context=context
+    )
+
+    assert context["long_interval"] is True
+    assert context["delta_kwh"] == pytest.approx(0.0)
+    assert valores[QUEBRA_MENSAL] == pytest.approx(0.0)
+
+
+def test_tracked_events_for_three_sensors_are_coalesced_by_numeric_snapshot(monkeypatch):
+    coordinator = _build_coordinator()
+    coordinator.data = types.SimpleNamespace(
+        atualizado_em=None,
+        concessionaria="CPFL-PIRATINING",
+        valores={},
+        diagnosticos={},
+    )
+    coordinator._last_consumo_total_kwh = 100.0
+    coordinator._last_geracao_total_kwh = 50.0
+    coordinator._last_injecao_total_kwh = 20.0
+    coordinator._last_consumo_timestamp = None
+    coordinator._last_geracao_timestamp = None
+    coordinator._last_injecao_timestamp = None
+    values = iter((101.0, 51.0, 21.0, 101.0, 51.0, 21.0))
+    process_calls = []
+
+    monkeypatch.setattr(
+        coordinator,
+        "_effective_value",
+        lambda key, *_args: 1 if key == const_module.CONF_DIA_LEITURA else "sensor.test",
+    )
+    monkeypatch.setattr(coordinator, "_read_entity_kwh", lambda *_args: next(values))
+    monkeypatch.setattr(coordinator, "_process_energy_states", lambda **kwargs: process_calls.append(kwargs))
+    monkeypatch.setattr(coordinator, "_refresh_icms_dependent_valores", lambda **_kwargs: "test")
+    monkeypatch.setattr(coordinator, "_apply_dynamic_valores_to_snapshot", lambda **_kwargs: None)
+    monkeypatch.setattr(coordinator, "_update_dynamic_diagnosticos", lambda *_args: None)
+    monkeypatch.setattr(coordinator, "_schedule_state_save", lambda: None)
+    monkeypatch.setattr(coordinator, "async_update_listeners", lambda: None)
+    monkeypatch.setattr(coordinator, "_effective_breakdowns", lambda: [])
+    monkeypatch.setattr(coordinator, "_current_period_valores", lambda *_args: {})
+    monkeypatch.setattr(coordinator, "_current_posto_period_valores", lambda *_args: {})
+    monkeypatch.setattr(coordinator, "_cached_rollover_context", lambda: {})
+    coordinator._consumo_period_state = {QUEBRA_MENSAL: {"kwh": 0.0}}
+    coordinator._geracao_period_state = {}
+    coordinator._injecao_period_state = {}
+    coordinator._consumo_tarifa_branca_state = {}
+
+    event = types.SimpleNamespace(time_fired=datetime(2026, 8, 12, 12, 0, tzinfo=UTC))
+    coordinator._handle_tracked_state_change(event)
+    coordinator._last_consumo_total_kwh = 101.0
+    coordinator._last_geracao_total_kwh = 51.0
+    coordinator._last_injecao_total_kwh = 21.0
+    coordinator._handle_tracked_state_change(event)
+
+    assert len(process_calls) == 1
 
 
 def test_initial_failure_uses_short_retry_interval_without_cached_snapshot():
