@@ -1,5 +1,6 @@
-"""Versao: v1
+"""Versao: v2
 Criado em: 2026-08-31 21:50 -03:00
+Alterado em: 2026-08-31 22:32 -03:00
 Criado por: Codex (ChatGPT)
 Projeto/pasta: ha.ext.tarifas
 Finalidade: Validar selecao e instalacao atomica do DuckDB CLI.
@@ -12,6 +13,7 @@ import gzip
 import hashlib
 import importlib.util
 import sys
+import threading
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -89,7 +91,14 @@ def test_provisions_validated_binary_once(monkeypatch, tmp_path):
     asset = provisioner.DuckDBAsset(
         "linux-amd64-musl", "duckdb.gz", hashlib.sha256(archive).hexdigest()
     )
-    monkeypatch.setattr(provisioner, "detect_duckdb_asset", lambda: asset)
+    main_thread = threading.get_ident()
+    detection_threads = []
+
+    def detect():
+        detection_threads.append(threading.get_ident())
+        return asset
+
+    monkeypatch.setattr(provisioner, "detect_duckdb_asset", detect)
     session = _Session(archive)
     validator = AsyncMock()
 
@@ -104,6 +113,7 @@ def test_provisions_validated_binary_once(monkeypatch, tmp_path):
     assert open(installed, "rb").read() == binary
     assert session.calls == 1
     assert validator.await_count == 2
+    assert detection_threads and all(item != main_thread for item in detection_threads)
     assert not list(tmp_path.rglob("*.part"))
 
 

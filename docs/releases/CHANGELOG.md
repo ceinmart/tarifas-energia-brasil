@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.4 - 2026-09-01
+
+- Move a deteccao de arquitetura e libc do provisionador DuckDB para uma thread,
+  eliminando o aviso de chamada bloqueante no event loop do Home Assistant.
+- Resume a ausencia esperada dos modulos DuckDB/PyArrow em uma mensagem curta de
+  fallback, sem incluir o traceback completo do processo filho no log.
+
 ## 0.2.3 - 2026-08-31
 
 - Mantem CSV exclusivamente manual; falhas nunca disparam download CSV.

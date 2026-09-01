@@ -1,7 +1,8 @@
-"""Versao: 0.2.3
+"""Versao: 0.2.4
 Criado em: 2026-04-22 21:41:36 -03:00
 Alterado em: 2026-08-10 15:50 -03:00
 Alterado em: 2026-08-31 22:01 -03:00
+Alterado em: 2026-08-31 22:32 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -579,6 +580,9 @@ class AneelClient:
                     )
                 _LOGGER.info("ANEEL Parquet processado com engine=%s", engine)
                 return records
+            except FileNotFoundError as err:
+                errors.append(f"{engine}: {AneelClient._describe_exception(err)}")
+                _LOGGER.info("ANEEL Parquet engine=%s indisponivel: %s", engine, err)
             except (OSError, ValueError, RuntimeError) as err:
                 errors.append(f"{engine}: {AneelClient._describe_exception(err)}")
                 _LOGGER.warning(
@@ -687,9 +691,7 @@ class AneelClient:
         try:
             stdout, stderr = await asyncio.wait_for(task, PARQUET_PROCESS_TIMEOUT_SECONDS)
             if process.returncode:
-                raise RuntimeError(
-                    f"exit={process.returncode}: " + stderr[:2048].decode("utf-8", "replace")
-                )
+                raise AneelClient._parquet_child_error(engine, process.returncode, stderr)
             records = await asyncio.to_thread(
                 json.loads, b"[]" if engine == "duckdb_cli" and not stdout.strip() else stdout
             )
@@ -705,6 +707,17 @@ class AneelClient:
                 await process.wait()
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+
+    @staticmethod
+    def _parquet_child_error(engine: str, returncode: int, stderr: bytes) -> Exception:
+        """Resume dependencia ausente sem registrar o traceback inteiro do filho."""
+
+        detail = stderr[:2048].decode("utf-8", "replace").strip()
+        for line in reversed(detail.splitlines()):
+            normalized = line.strip()
+            if normalized.startswith(("ModuleNotFoundError:", "ImportError:")):
+                return FileNotFoundError(f"{engine}: {normalized}")
+        return RuntimeError(f"exit={returncode}: {detail}")
 
     @staticmethod
     def _query_parquet_sync(

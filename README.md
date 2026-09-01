@@ -27,10 +27,10 @@ Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de
 
 ## Status
 
-- Ultima versao publicada: [`0.2.3`](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.3).
+- Ultima versao publicada: [`0.2.4`](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.4).
 - Escopo inicial: base funcional da integracao + MVP com concessionarias suportadas.
 - Concessionaria obrigatoria do MVP: `CPFL-PIRATINING`.
-- Documentacao tecnica de referencia: [DOCUMENTACAO_CODIGO_0.2.3.md](./docs/releases/DOCUMENTACAO_CODIGO_0.2.3.md).
+- Documentacao tecnica de referencia: [DOCUMENTACAO_CODIGO_0.2.4.md](./docs/releases/DOCUMENTACAO_CODIGO_0.2.4.md).
 - Historico completo de mudancas: [CHANGELOG](./docs/releases/CHANGELOG.md).
 
 Detalhes de compatibilidade: [Parquet isolado e alertas](./docs/compatibilidade_parquet_e_alertas.md).
@@ -377,7 +377,7 @@ Regra adicional implementada:
 ## Links de versao
 
 - [Runbook: coleta de stack do HA bloqueado](./docs/coleta_stack_ha_bloqueado.md)
-- [Documentacao tecnica da versao 0.2.3](./docs/releases/DOCUMENTACAO_CODIGO_0.2.3.md)
+- [Documentacao tecnica da versao 0.2.4](./docs/releases/DOCUMENTACAO_CODIGO_0.2.4.md)
 - [Changelog completo](./docs/releases/CHANGELOG.md)
-- [Release 0.2.3 no GitHub](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.3)
+- [Release 0.2.4 no GitHub](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.4)
 - [Todas as releases](https://github.com/ceinmart/tarifas-energia-brasil/releases)

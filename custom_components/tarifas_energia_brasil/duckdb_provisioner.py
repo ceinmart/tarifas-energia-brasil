@@ -1,5 +1,6 @@
-"""Versao: 0.2.3
+"""Versao: 0.2.4
 Criado em: 2026-08-31 21:40 -03:00
+Alterado em: 2026-08-31 22:32 -03:00
 Criado por: Codex (ChatGPT)
 Projeto/pasta: ha.ext.tarifas
 Finalidade: Provisionar de modo seguro e persistente o DuckDB CLI oficial.
@@ -138,7 +139,9 @@ async def async_provision_duckdb_cli(
 ) -> str:
     """Reutiliza ou instala atomicamente o CLI oficial correspondente ao host."""
 
-    asset = detect_duckdb_asset()
+    # platform.libc_ver() pode abrir o executavel Python. A deteccao inteira
+    # precisa ficar fora do event loop do Home Assistant.
+    asset = await asyncio.to_thread(detect_duckdb_asset)
     target_dir = Path(root) / DUCKDB_CLI_VERSION / asset.platform_id
     target = target_dir / "duckdb"
     lock_key = (id(asyncio.get_running_loop()), str(target.resolve()))

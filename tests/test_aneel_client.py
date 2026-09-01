@@ -1,7 +1,8 @@
-"""Versao: 0.2.3
+"""Versao: 0.2.4
 Criado em: 2026-04-23 16:20:00 -03:00
 Alterado em: 2026-08-10 15:50 -03:00
 Alterado em: 2026-08-31 22:01 -03:00
+Alterado em: 2026-08-31 22:32 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -630,6 +631,19 @@ def test_cli_provision_failure_continues_to_pyarrow(monkeypatch):
 
     assert records == [{"engine": "pyarrow"}]
     assert attempts == ["duckdb", "pyarrow"]
+
+
+def test_missing_native_module_is_reduced_to_short_error():
+    error = AneelClient._parquet_child_error(
+        "duckdb",
+        1,
+        b'Traceback (most recent call last):\n  File "worker.py", line 1\n'
+        b"ModuleNotFoundError: No module named 'duckdb'\n",
+    )
+
+    assert isinstance(error, FileNotFoundError)
+    assert str(error) == "duckdb: ModuleNotFoundError: No module named 'duckdb'"
+    assert "Traceback" not in str(error)
 
 
 def test_pyarrow_subprocess_reads_filtered_parquet(tmp_path):
