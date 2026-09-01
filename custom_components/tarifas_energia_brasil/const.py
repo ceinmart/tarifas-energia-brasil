@@ -1,6 +1,7 @@
-"""Versao: 0.2.2
+"""Versao: 0.2.3
 Criado em: 2026-04-22 21:41:36 -03:00
 Alterado em: 2026-08-10 15:50 -03:00
+Alterado em: 2026-08-31 22:01 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -14,9 +15,12 @@ from homeassistant.const import Platform
 
 DOMAIN = "tarifas_energia_brasil"
 NAME = "Tarifas Energia Brasil"
-VERSION = "0.2.2"
+VERSION = "0.2.3"
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
+
+CONF_ALERTA_DIAS = "alerta_dados_desatualizados_dias"
+ALERTA_DIAS_PADRAO = 3
 
 CONF_CONCESSIONARIA = "concessionaria"
 CONF_DIA_LEITURA = "dia_leitura_reset_mensal"

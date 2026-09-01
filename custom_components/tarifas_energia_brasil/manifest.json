@@ -6,7 +6,8 @@
   ],
   "config_flow": true,
   "dependencies": [
-    "diagnostics"
+    "diagnostics",
+    "persistent_notification"
   ],
   "documentation": "https://github.com/ceinmart/tarifas-energia-brasil",
   "integration_type": "service",
@@ -15,6 +16,6 @@
   "loggers": [
     "custom_components.tarifas_energia_brasil"
   ],
-  "requirements": ["pyarrow==25.0.0"],
-  "version": "0.2.2"
+  "requirements": [],
+  "version": "0.2.3"
 }

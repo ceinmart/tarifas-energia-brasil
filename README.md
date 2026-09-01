@@ -27,11 +27,13 @@ Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de
 
 ## Status
 
-- Versao atual: [`0.2.2`](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.2).
+- Ultima versao publicada: [`0.2.3`](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.3).
 - Escopo inicial: base funcional da integracao + MVP com concessionarias suportadas.
 - Concessionaria obrigatoria do MVP: `CPFL-PIRATINING`.
-- Documentacao tecnica de referencia: [DOCUMENTACAO_CODIGO_0.2.2.md](./docs/releases/DOCUMENTACAO_CODIGO_0.2.2.md).
+- Documentacao tecnica de referencia: [DOCUMENTACAO_CODIGO_0.2.3.md](./docs/releases/DOCUMENTACAO_CODIGO_0.2.3.md).
 - Historico completo de mudancas: [CHANGELOG](./docs/releases/CHANGELOG.md).
+
+Detalhes de compatibilidade: [Parquet isolado e alertas](./docs/compatibilidade_parquet_e_alertas.md).
 
 ## Instalacao (HACS)
 
@@ -42,6 +44,14 @@ Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de
 5. Reinicie o Home Assistant.
 6. Adicione a integracao em `Configuracoes > Dispositivos e Servicos`.
 
+Na versao 0.2.3, os modulos Parquet continuam opcionais. Se a API e o modulo
+DuckDB falharem, a integracao baixa sob demanda o DuckDB CLI oficial compativel,
+confere SHA-256, testa-o em processo separado e o guarda na pasta persistente
+`/config/tarifas_energia_brasil/bin`. Nao ha compilacao. Consulte a
+[documentacao de compatibilidade](./docs/compatibilidade_parquet_e_alertas.md).
+Se o provisionamento e os demais leitores falharem, a integracao permanece carregada
+e oferece CSV manual.
+
 ## Configuracao no Home Assistant
 
 Campos da configuracao inicial:
@@ -49,6 +59,7 @@ Campos da configuracao inicial:
 - `Concessionaria` (somente suportadas).
 - `Dia de leitura/reset mensal` (padrao `1`).
 - `Frequencia de atualizacao` em horas (padrao `24`).
+- `Alerta dados desatualizados em dias` (padrao `3`, intervalo `1–365`; tambem nas opcoes).
 - `Meio de acesso ANEEL`: `datastore_search`.
 - `Entidade de consumo acumulado em kWh` (obrigatoria).
 - `Entidade de geracao acumulada em kWh` (opcional).
@@ -171,7 +182,7 @@ Exemplos basicos:
   - `0591b8f6-fe54-437b-b72b-1aa2efd46e42` (acionamento de bandeiras)
   - `5879ca80-b3bd-45b1-a135-d9b77c1d5b36` (adicional de bandeiras)
 - Alternativo automatico exclusivo do Fio B: Parquet anual (limite de 100 MiB),
-  processado preferencialmente com DuckDB existente ou com PyArrow.
+  processado na ordem DuckDB modulo, DuckDB CLI e PyArrow, cada um em processo separado.
 - CSV e usado somente pelas actions manuais `atualizar_via_csv` e
   `cancelar_atualizacao_csv`. O processamento e feito em streaming e pode ser cancelado.
 
@@ -200,7 +211,16 @@ Exemplos basicos:
 
 ## Como ver a ultima atualizacao
 
-Cada entidade publica atributos de coleta, quando aplicavel:
+Na versao 0.2.3, os atributos basicos incluem `ultima_coleta_bem_sucedida`,
+`ultima_tentativa`, `idade_dados_dias`, `dados_desatualizados` e
+`usando_dados_anteriores`. `ultima_atualizacao` passa a representar a coleta
+externa mais antiga usada no snapshot, sem avancar em falhas ou eventos de consumo.
+Falhas geram notificacao persistente imediata; o prazo de idade e verificado a cada
+hora. O aviso oferece link para a action CSV, que exige selecao da entrada/dataset e
+confirmacao do usuario. Nao existe download CSV automatico.
+
+Com atributos extras habilitados, cada entidade publica tambem metadados de coleta,
+quando aplicavel:
 
 - `ultima_coleta`
 - `fonte`
@@ -357,7 +377,7 @@ Regra adicional implementada:
 ## Links de versao
 
 - [Runbook: coleta de stack do HA bloqueado](./docs/coleta_stack_ha_bloqueado.md)
-- [Documentacao tecnica da versao 0.2.2](./docs/releases/DOCUMENTACAO_CODIGO_0.2.2.md)
+- [Documentacao tecnica da versao 0.2.3](./docs/releases/DOCUMENTACAO_CODIGO_0.2.3.md)
 - [Changelog completo](./docs/releases/CHANGELOG.md)
-- [Release 0.2.2 no GitHub](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.2)
+- [Release 0.2.3 no GitHub](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.3)
 - [Todas as releases](https://github.com/ceinmart/tarifas-energia-brasil/releases)

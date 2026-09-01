@@ -1,6 +1,7 @@
-"""Versao: 0.2.1
+"""Versao: 0.2.3
 Criado em: 2026-04-23 16:20:00 -03:00
 Alterado em: 2026-08-10 15:50 -03:00
+Alterado em: 2026-08-31 22:01 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -575,91 +576,100 @@ def test_pyarrow_parquet_selects_cpfl_piratining_fio_b(tmp_path):
         parquet_path,
     )
 
-    records = AneelClient._query_parquet_pyarrow_sync(
-        pq,
+    records = asyncio.run(AneelClient._run_parquet_engine(
+        "pyarrow",
         str(parquet_path),
         {
             "SigNomeAgente": "CPFL-PIRATINING",
             "DscComponenteTarifario": "TUSD_FioB",
         },
-    )
+    ))
 
     assert len(records) == 1
     assert records[0]["VlrComponenteTarifario"] == pytest.approx(189.008164374)
 
 
-def test_parquet_engine_prefers_duckdb(monkeypatch):
-    duckdb_module = object()
-    monkeypatch.setattr(
-        aneel_module.importlib,
-        "import_module",
-        lambda name: duckdb_module if name == "duckdb" else pytest.fail(name),
+@pytest.mark.parametrize("winner,expected", [
+    ("duckdb", ["duckdb"]),
+    ("duckdb_cli", ["duckdb", "duckdb_cli"]),
+    ("pyarrow", ["duckdb", "duckdb_cli", "pyarrow"]),
+    (None, ["duckdb", "duckdb_cli", "pyarrow"]),
+])
+def test_parquet_fallback_order(monkeypatch, winner, expected):
+    attempts = []
+    async def run(engine, path, filters):
+        attempts.append(engine)
+        if engine != winner:
+            raise RuntimeError("exit=-4: SIGILL")
+        return [{"engine": engine}]
+    monkeypatch.setattr(AneelClient, "_run_parquet_engine", staticmethod(run))
+    if winner:
+        assert AneelClient._query_parquet_file_sync("unused", None) == [{"engine": winner}]
+    else:
+        with pytest.raises(AneelClientError, match="action CSV manual"):
+            AneelClient._query_parquet_file_sync("unused", None)
+    assert attempts == expected
+
+
+def test_cli_provision_failure_continues_to_pyarrow(monkeypatch):
+    attempts = []
+
+    async def run(engine, path, filters):
+        attempts.append(engine)
+        if engine == "duckdb":
+            raise RuntimeError("modulo ausente")
+        return [{"engine": engine}]
+
+    async def unavailable_cli():
+        raise RuntimeError("download indisponivel")
+
+    monkeypatch.setattr(AneelClient, "_run_parquet_engine", staticmethod(run))
+    records = asyncio.run(
+        AneelClient._query_parquet_file("unused", None, cli_resolver=unavailable_cli)
     )
-    monkeypatch.setattr(
-        AneelClient,
-        "_query_parquet_duckdb_sync",
-        staticmethod(lambda module, path, filters: [{"engine": "duckdb"}]),
-    )
-
-    records = AneelClient._query_parquet_file_sync("unused.parquet", None)
-
-    assert records == [{"engine": "duckdb"}]
-
-
-def test_parquet_engine_falls_back_to_pyarrow(monkeypatch, caplog):
-    pyarrow_module = object()
-
-    def _import_engine(name):
-        if name == "duckdb":
-            raise ModuleNotFoundError("duckdb")
-        return pyarrow_module
-
-    monkeypatch.setattr(aneel_module.importlib, "import_module", _import_engine)
-    monkeypatch.setattr(
-        AneelClient,
-        "_query_parquet_pyarrow_sync",
-        staticmethod(lambda module, path, filters: [{"engine": "pyarrow"}]),
-    )
-    caplog.set_level(logging.INFO, logger=aneel_module.__name__)
-
-    records = AneelClient._query_parquet_file_sync("unused.parquet", None)
 
     assert records == [{"engine": "pyarrow"}]
-    assert "trocando engine duckdb por pyarrow" in caplog.text
-    assert "engine=pyarrow" in caplog.text
+    assert attempts == ["duckdb", "pyarrow"]
 
 
-def test_parquet_engine_falls_back_when_duckdb_query_fails(monkeypatch):
-    monkeypatch.setattr(
-        aneel_module.importlib,
-        "import_module",
-        lambda name: object(),
-    )
-    monkeypatch.setattr(
-        AneelClient,
-        "_query_parquet_duckdb_sync",
-        staticmethod(lambda module, path, filters: (_ for _ in ()).throw(RuntimeError("boom"))),
-    )
-    monkeypatch.setattr(
-        AneelClient,
-        "_query_parquet_pyarrow_sync",
-        staticmethod(lambda module, path, filters: [{"engine": "pyarrow"}]),
-    )
-
-    records = AneelClient._query_parquet_file_sync("unused.parquet", None)
-
-    assert records == [{"engine": "pyarrow"}]
+def test_pyarrow_subprocess_reads_filtered_parquet(tmp_path):
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    path = tmp_path / "sample.parquet"
+    pq.write_table(pa.table({"agent": ["A", "B"], "amount": [1, 2]}), path)
+    assert asyncio.run(AneelClient._run_parquet_engine("pyarrow", str(path), {"agent": "A"})) == [
+        {"agent": "A", "amount": 1}
+    ]
 
 
-def test_parquet_engine_failure_is_controlled(monkeypatch):
-    monkeypatch.setattr(
-        aneel_module.importlib,
-        "import_module",
-        lambda name: (_ for _ in ()).throw(ModuleNotFoundError(name)),
-    )
-
-    with pytest.raises(AneelClientError, match="action CSV manual"):
-        AneelClient._query_parquet_file_sync("unused.parquet", None)
+@pytest.mark.parametrize("mode", ["timeout", "cancel", "oversize", "crash"])
+def test_parquet_child_is_reaped(monkeypatch, tmp_path, mode):
+    # Executa filho real: valida que timeout/cancelamento nao deixam processo vivo.
+    child = tmp_path / "parquet_worker.py"
+    child.write_text("import os, sys, time\n"
+        + ("os._exit(4)" if mode == "crash" else
+           "print('x' * 100000, flush=True); time.sleep(30)" if mode == "oversize" else
+           "time.sleep(30)"))
+    monkeypatch.setattr(aneel_module, "__file__", str(tmp_path / "aneel_client.py"))
+    monkeypatch.setattr(aneel_module, "PARQUET_PROCESS_TIMEOUT_SECONDS", 0.2 if mode == "timeout" else 5)
+    monkeypatch.setattr(aneel_module, "PARQUET_MAX_RESULT_BYTES", 1024)
+    children = []
+    original = asyncio.create_subprocess_exec
+    async def create(*args, **kwargs):
+        process = await original(*args, **kwargs)
+        children.append(process)
+        return process
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create)
+    async def scenario():
+        task = asyncio.create_task(AneelClient._run_parquet_engine("pyarrow", "unused", None))
+        if mode == "cancel":
+            while not children:
+                await asyncio.sleep(0.01)
+            task.cancel()
+        with pytest.raises((TimeoutError, asyncio.CancelledError, ValueError, RuntimeError, BrokenPipeError)):
+            await task
+    asyncio.run(scenario())
+    assert len(children) == 1 and children[0].returncode is not None
 
 
 def test_csv_fallback_filters_semicolon_latin1_chunks():
@@ -922,3 +932,17 @@ def test_parse_fio_b_records_accepts_cpfl_piratining_current_rows():
     assert parsed["branca_bruto_r_kwh_por_posto"]["ponta"] == pytest.approx(0.491421249227)
     assert parsed["vigencia_inicio"] == "2026-01-01"
     assert parsed["vigencia_fim"] == "2026-10-22"
+
+
+def test_native_worker_inherits_ha_dependency_paths(monkeypatch, tmp_path):
+    # Simula dependencia instalada em /config/deps, fora do site-packages padrao.
+    package = tmp_path / 'pyarrow'
+    package.mkdir()
+    (package / '__init__.py').write_text(
+        'def set_cpu_count(n): pass\ndef set_io_thread_count(n): pass\n')
+    (package / 'parquet.py').write_text(
+        'class Table:\n    def to_pylist(self): return [{"source": "external_deps"}]\n'
+        'def read_table(*a, **k): return Table()\n')
+    monkeypatch.syspath_prepend(str(tmp_path))
+    records = asyncio.run(AneelClient._run_parquet_engine('pyarrow', 'unused', None))
+    assert records == [{'source': 'external_deps'}]

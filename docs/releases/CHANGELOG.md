@@ -1,6 +1,20 @@
 # Changelog
 
-## Unreleased
+## 0.2.3 - 2026-08-31
+
+- Mantem CSV exclusivamente manual; falhas nunca disparam download CSV.
+- Isola leitores na ordem DuckDB modulo, DuckDB CLI e PyArrow, com timeout,
+  cancelamento, limites de saida e tratamento de SIGILL sem derrubar o HA.
+- Leitores nativos opcionais: uma instalacao ausente nao bloqueia o setup;
+  nao ha compilacao. Apos falha da API e do modulo DuckDB, baixa sob demanda o
+  CLI oficial 1.5.5 correspondente a arquitetura/libc, valida SHA-256 e execucao,
+  e instala atomicamente em `/config/tarifas_energia_brasil/bin`.
+- Adiciona prazo configuravel de alerta (1–365 dias, padrao 3), verificacao horaria
+  e atributos basicos que distinguem idade da coleta de tentativas/eventos locais.
+- Corrige `ultima_atualizacao` para nao aparentar dados novos depois de falha.
+- Notificacao persistente por entrada informa falha ou idade excedida, preserva
+  os valores e oferece link para abrir a action CSV manual; recuperacao remove aviso.
+- Detalhes, provisionamento e limitacoes: [Parquet isolado e alertas](../compatibilidade_parquet_e_alertas.md).
 
 ## 0.2.2 - 2026-08-12
 

@@ -1,6 +1,7 @@
-"""Versao: 0.2.0
+"""Versao: 0.2.3
 Criado em: 2026-04-22 21:41:36 -03:00
 Alterado em: 2026-08-10 (America/Sao_Paulo)
+Alterado em: 2026-08-31 22:01 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -14,6 +15,8 @@ from homeassistant import config_entries
 from homeassistant.helpers import selector
 
 from .const import (
+    ALERTA_DIAS_PADRAO,
+    CONF_ALERTA_DIAS,
     CONF_CONCESSIONARIA,
     CONF_DIA_LEITURA,
     CONF_ENTIDADE_CONSUMO,
@@ -119,6 +122,13 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     step=1,
                     mode=selector.NumberSelectorMode.BOX,
                 )
+            ),
+            vol.Required(
+                CONF_ALERTA_DIAS,
+                default=int(defaults.get(CONF_ALERTA_DIAS, ALERTA_DIAS_PADRAO)),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=1, max=365, step=1,
+                                              mode=selector.NumberSelectorMode.BOX)
             ),
             vol.Required(
                 CONF_METODO_ANEEL,

@@ -1,5 +1,6 @@
-"""Versao: 0.1.0
+"""Versao: 0.2.3
 Criado em: 2026-04-22 21:41:36 -03:00
+Alterado em: 2026-08-31 22:01 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -584,6 +585,8 @@ class TarifasEnergiaBrasilSensor(CoordinatorEntity[TarifasEnergiaBrasilCoordinat
             "concessionaria": self.coordinator.data.concessionaria,
             "ultima_atualizacao": self.coordinator.data.atualizado_em.isoformat(),
         }
+        attrs.update(self.coordinator.freshness_attributes())
+        attrs["ultima_atualizacao"] = attrs["ultima_coleta_bem_sucedida"]
         if not atributos_extras_habilitados(
             {
                 **self._entry.data,

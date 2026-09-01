@@ -14,7 +14,8 @@
           "entidade_injecao_kwh": "Entidade de energia injetada acumulada (kWh)",
           "tipo_fornecimento": "Tipo de fornecimento",
           "quebras_calculo": "Quebras de calculo",
-          "habilitar_atributos_extras": "Informacoes extras nos atributos"
+          "habilitar_atributos_extras": "Informacoes extras nos atributos",
+          "alerta_dados_desatualizados_dias": "Alerta dados desatualizados em dias"
         }
       }
     },
@@ -49,7 +50,8 @@
           "tarifa_branca_fim_intermediario_1": "Tarifa Branca - fim intermediario 1",
           "tarifa_branca_inicio_intermediario_2": "Tarifa Branca - inicio intermediario 2",
           "tarifa_branca_fim_intermediario_2": "Tarifa Branca - fim intermediario 2",
-          "tarifa_branca_feriados_extras": "Tarifa Branca - feriados extras"
+          "tarifa_branca_feriados_extras": "Tarifa Branca - feriados extras",
+          "alerta_dados_desatualizados_dias": "Alerta dados desatualizados em dias"
         }
       }
     },
@@ -58,7 +60,13 @@
     }
   },
   "services": {
-    "atualizar_via_csv": {"name": "Atualizar via CSV", "description": "Inicia uma coleta CSV manual em background."},
-    "cancelar_atualizacao_csv": {"name": "Cancelar atualizacao CSV", "description": "Cancela a coleta CSV manual ativa."}
+    "atualizar_via_csv": {
+      "name": "Atualizar via CSV",
+      "description": "Inicia uma coleta CSV manual em background."
+    },
+    "cancelar_atualizacao_csv": {
+      "name": "Cancelar atualizacao CSV",
+      "description": "Cancela a coleta CSV manual ativa."
+    }
   }
 }

@@ -1,6 +1,7 @@
-"""Versao: 0.2.2
+"""Versao: 0.2.3
 Criado em: 2026-04-23 17:20:00 -03:00
 Alterado em: 2026-08-12 (America/Sao_Paulo)
+Alterado em: 2026-08-31 22:01 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -944,3 +945,135 @@ def test_dynamic_icms_refresh_uses_triphase_minimum_for_range():
     assert valores["icms_disponibilidade_minima_kwh"] == pytest.approx(100.0)
     assert "base faturavel para ICMS 100.000 kWh" in valores["icms_calculo_expressao"]
     assert "ICMS aplicado = 12.00%" in valores["icms_calculo_expressao"]
+
+
+def _freshness_coordinator(age_days=4):
+    from unittest.mock import AsyncMock
+    coordinator = _build_coordinator()
+    coordinator.entry = types.SimpleNamespace(
+        entry_id='entry-a', data={'concessionaria': 'CPFL-PIRATINING'}, options={})
+    now = datetime.now().astimezone()
+    coordinator.data = ResultadoCalculo(
+        atualizado_em=now, concessionaria='CPFL-PIRATINING', valores={'fio_b': 1},
+        coletas_por_chave={'fio_b': MetadadosColeta(ultima_coleta=(now-timedelta(days=age_days)).isoformat())},
+        diagnosticos={'ultima_tentativa': now.isoformat()})
+    coordinator.hass = types.SimpleNamespace(services=types.SimpleNamespace(async_call=AsyncMock()))
+    return coordinator, now
+
+
+def test_freshness_uses_collection_not_recent_sensor_event():
+    coordinator, now = _freshness_coordinator()
+    attrs = coordinator.freshness_attributes(now)
+    assert attrs['idade_dados_dias'] == 4
+    assert attrs['dados_desatualizados'] is True
+    assert attrs['ultima_coleta_bem_sucedida'] != coordinator.data.atualizado_em.isoformat()
+    coordinator.entry.options['alerta_dados_desatualizados_dias'] = 5
+    assert coordinator.freshness_attributes(now)['dados_desatualizados'] is False
+    coordinator.entry.options['alerta_dados_desatualizados_dias'] = 4
+    assert coordinator.freshness_attributes(now)['dados_desatualizados'] is True
+
+
+@pytest.mark.parametrize('date_value', [None, 'invalid', '2099-01-01T00:00:00+00:00'])
+def test_unknown_collection_date_is_not_fabricated(date_value):
+    coordinator, now = _freshness_coordinator()
+    coordinator.data.coletas_por_chave['fio_b'].ultima_coleta = date_value
+    attrs = coordinator.freshness_attributes(now)
+    assert attrs['ultima_coleta_bem_sucedida'] is None
+    assert attrs['dados_desatualizados'] is True
+
+
+def test_notification_deduplicates_and_recovers_without_csv():
+    import asyncio
+    coordinator, now = _freshness_coordinator()
+    async def scenario():
+        await coordinator._async_check_freshness(now)
+        await coordinator._async_check_freshness(now)
+        calls = coordinator.hass.services.async_call.call_args_list
+        assert len(calls) == 1
+        assert calls[0].args[:2] == ('persistent_notification', 'create')
+        data = calls[0].args[2]
+        assert 'atualizar_via_csv' in data['message']
+        assert 'Nenhum CSV sera baixado automaticamente' in data['message']
+        coordinator.data.coletas_por_chave['fio_b'].ultima_coleta = now.isoformat()
+        await coordinator._async_check_freshness(now)
+        assert coordinator.hass.services.async_call.call_args.args[:2] == ('persistent_notification', 'dismiss')
+        assert coordinator.hass.services.async_call.call_args.args[2]['notification_id'] == data['notification_id']
+    asyncio.run(scenario())
+
+
+def test_fresh_data_failure_still_notifies_and_entries_are_distinct():
+    import asyncio
+    coordinator, _ = _freshness_coordinator(0)
+    asyncio.run(coordinator._async_notify_collection('network failed'))
+    first = coordinator.hass.services.async_call.call_args.args[2]
+    assert 'dentro do prazo' in first['message']
+    coordinator.entry.entry_id = 'entry-b'
+    coordinator._collection_notification_message = None
+    asyncio.run(coordinator._async_notify_collection('network failed'))
+    assert first['notification_id'] != coordinator.hass.services.async_call.call_args.args[2]['notification_id']
+
+
+def test_automatic_failure_preserves_snapshot_and_collection_dates(monkeypatch):
+    import asyncio
+    from unittest.mock import AsyncMock, Mock
+    coordinator, _ = _freshness_coordinator()
+    old_values = coordinator.data.valores.copy()
+    old_date = coordinator.data.coletas_por_chave['fio_b'].ultima_coleta
+    old_updated = coordinator.data.atualizado_em
+    coordinator.config_entry = coordinator.entry
+    coordinator.async_ensure_state_loaded = AsyncMock()
+    coordinator._schedule_state_save = Mock()
+    coordinator._last_consumo_timestamp = None
+    coordinator._manual_csv_datasets = frozenset()
+    coordinator._failure_retry_interval = Mock(return_value=timedelta(hours=24))
+    coordinator._aneel_client = types.SimpleNamespace(
+        fetch_tarifas=AsyncMock(side_effect=RuntimeError('network failed')),
+        fetch_fio_b=AsyncMock(return_value=None), fetch_bandeira=AsyncMock(return_value=None))
+    monkeypatch.setattr(coordinator_module, 'async_get_clientsession', lambda hass: None)
+    monkeypatch.setattr(coordinator_module, 'extract_tributos', AsyncMock(return_value=None))
+    result = asyncio.run(coordinator._async_update_data())
+    assert result.valores == old_values
+    assert result.atualizado_em == old_updated
+    assert result.coletas_por_chave['fio_b'].ultima_coleta == old_date
+    assert result.diagnosticos['usou_ultimo_valor_valido'] is True
+    assert result.diagnosticos['ultima_tentativa']
+    assert coordinator.hass.services.async_call.call_args.args[:2] == ('persistent_notification', 'create')
+    for name in ('fetch_tarifas', 'fetch_fio_b', 'fetch_bandeira'):
+        assert getattr(coordinator._aneel_client, name).call_args.kwargs['manual_csv'] is False
+
+
+def test_collection_age_survives_snapshot_restore():
+    coordinator, now = _freshness_coordinator()
+    restored = coordinator._restore_cached_snapshot(coordinator._serialize_cached_snapshot())
+    coordinator.data = restored
+    assert coordinator.freshness_attributes(now)['idade_dados_dias'] == 4
+
+
+def test_periodic_freshness_check_is_unsubscribed(monkeypatch):
+    import asyncio
+    from unittest.mock import Mock
+    coordinator, now = _freshness_coordinator()
+    coordinator._unsub_state_listeners = []
+    unsub = Mock()
+    callbacks = []
+    def subscribe(hass, callback, interval):
+        callbacks.append((callback, interval))
+        return unsub
+    monkeypatch.setattr(sys.modules['homeassistant.helpers.event'],
+        'async_track_time_interval', subscribe, raising=False)
+    async def scenario():
+        await coordinator.async_start_state_tracking()
+        assert callbacks[0][1] == timedelta(hours=1)
+        await coordinator.async_start_state_tracking()
+        assert len(callbacks) == 1
+        await coordinator.async_stop_state_tracking()
+    asyncio.run(scenario())
+    unsub.assert_called_once()
+
+
+def test_notification_failure_does_not_raise_or_trigger_download():
+    import asyncio
+    coordinator, now = _freshness_coordinator()
+    coordinator.hass.services.async_call.side_effect = RuntimeError('notification unavailable')
+    asyncio.run(coordinator._async_notify_collection('collection error'))
+    assert coordinator.data.valores == {'fio_b': 1}

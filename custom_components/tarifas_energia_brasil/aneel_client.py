@@ -1,23 +1,26 @@
-"""Versao: 0.2.1
+"""Versao: 0.2.3
 Criado em: 2026-04-22 21:41:36 -03:00
 Alterado em: 2026-08-10 15:50 -03:00
+Alterado em: 2026-08-31 22:01 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
 
 from __future__ import annotations
 
+import asyncio
 import codecs
 import csv
-import importlib
 import json
 import logging
 import os
+import sys
 import tempfile
 import time
 import unicodedata
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -32,6 +35,7 @@ from .const import (
     METODO_ANEEL_PARQUET,
     obter_ordem_alternativa_metodo_aneel,  # noqa: F401 - compatibilidade publica
 )
+from .duckdb_provisioner import async_provision_duckdb_cli, find_duckdb_cli_on_path
 from .models import MetadadosColeta
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,6 +48,8 @@ CSV_STREAM_CHUNK_SIZE = 64 * 1024
 CSV_STREAM_ENCODING = "latin-1"
 CSV_PROGRESS_LOG_INTERVAL_SECONDS = 30
 CSV_PROGRESS_LOG_INTERVAL_BYTES = 25 * 1024 * 1024
+PARQUET_PROCESS_TIMEOUT_SECONDS = 120
+PARQUET_MAX_RESULT_BYTES = 16 * 1024 * 1024
 PARQUET_MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
 DATASTORE_SEARCH_PAGE_LIMIT = 1000
 
@@ -75,11 +81,14 @@ class AneelClient:
         self,
         session: aiohttp.ClientSession,
         executor_job: Callable[..., Awaitable[Any]] | None = None,
+        duckdb_cli_root: str | None = None,
     ) -> None:
         """Inicializa cliente com sessao HTTP externa."""
 
         self._session = session
         self._executor_job = executor_job
+        self._duckdb_cli_root = duckdb_cli_root
+        self._resolved_duckdb_cli: str | None = None
 
     async def fetch_tarifas(
         self,
@@ -512,7 +521,9 @@ class AneelClient:
                 await self._run_blocking(
                     self._append_parquet_temp_sync, path, bytes(write_buffer)
                 )
-            return await self._run_blocking(self._query_parquet_file_sync, path, filters)
+            return await self._query_parquet_file(
+                path, filters, cli_resolver=self._async_resolve_duckdb_cli
+            )
         finally:
             await self._run_blocking(self._remove_parquet_temp_sync, path)
 
@@ -548,73 +559,152 @@ class AneelClient:
         path: str,
         filters: dict[str, Any] | None,
     ) -> list[dict[str, Any]]:
-        """Consulta Parquet priorizando DuckDB e usando PyArrow como fallback."""
+        """Wrapper para consumidores sincronos fora do event loop."""
+        return asyncio.run(AneelClient._query_parquet_file(path, filters))
 
-        errors: list[str] = []
+    @staticmethod
+    async def _query_parquet_file(path, filters, cli_resolver=None):
+        """Isola cada leitor nativo; falhas nunca acionam CSV automaticamente."""
+        errors = []
+        for engine in ("duckdb", "duckdb_cli", "pyarrow"):
+            try:
+                executable = None
+                if engine == "duckdb_cli" and cli_resolver is not None:
+                    executable = await cli_resolver()
+                if executable is None:
+                    records = await AneelClient._run_parquet_engine(engine, path, filters)
+                else:
+                    records = await AneelClient._run_parquet_engine(
+                        engine, path, filters, duckdb_cli_path=executable
+                    )
+                _LOGGER.info("ANEEL Parquet processado com engine=%s", engine)
+                return records
+            except (OSError, ValueError, RuntimeError) as err:
+                errors.append(f"{engine}: {AneelClient._describe_exception(err)}")
+                _LOGGER.warning(
+                    "ANEEL Parquet engine=%s falhou em processo separado: %s", engine, err
+                )
+        raise AneelClientError(
+            "Nenhum engine Parquet ficou disponivel. Use a action CSV manual. " + " | ".join(errors)
+        )
+
+    async def _async_resolve_duckdb_cli(self):
+        """Usa o PATH ou provisiona o CLI na configuracao persistente do HA."""
+        if self._resolved_duckdb_cli:
+            return self._resolved_duckdb_cli
+        installed = await asyncio.to_thread(find_duckdb_cli_on_path)
+        if installed:
+            self._resolved_duckdb_cli = installed
+            return installed
+        if not self._duckdb_cli_root:
+            raise FileNotFoundError("pasta persistente para DuckDB CLI nao configurada")
         try:
-            duckdb = importlib.import_module("duckdb")
-            records = AneelClient._query_parquet_duckdb_sync(duckdb, path, filters)
-            _LOGGER.info("ANEEL Parquet processado com engine=duckdb")
-            return records
-        except Exception as err:
-            errors.append(f"duckdb: {AneelClient._describe_exception(err)}")
-            _LOGGER.warning(
-                "ANEEL Parquet trocando engine duckdb por pyarrow: erro=%s",
-                AneelClient._describe_exception(err),
+            self._resolved_duckdb_cli = await async_provision_duckdb_cli(
+                self._session, self._duckdb_cli_root, self._async_validate_duckdb_cli
             )
-
-        try:
-            parquet = importlib.import_module("pyarrow.parquet")
-            records = AneelClient._query_parquet_pyarrow_sync(parquet, path, filters)
-            _LOGGER.info("ANEEL Parquet processado com engine=pyarrow")
-            return records
         except Exception as err:
-            errors.append(f"pyarrow: {AneelClient._describe_exception(err)}")
-            raise AneelClientError(
-                "Nenhum engine Parquet ficou disponivel. Use a action CSV manual. "
-                f"Erros: {' | '.join(errors)}"
-            ) from err
+            raise RuntimeError(f"provisionamento do DuckDB CLI falhou: {err}") from err
+        return self._resolved_duckdb_cli
+
+    async def _async_validate_duckdb_cli(self, executable: str) -> None:
+        records = await self._run_parquet_engine(
+            "duckdb_cli", None, None, duckdb_cli_path=executable, validation=True
+        )
+        if not records or not str(records[0].get("version", "")).endswith("1.5.5"):
+            raise RuntimeError("versao inesperada do DuckDB CLI provisionado")
 
     @staticmethod
-    def _query_parquet_duckdb_sync(
-        duckdb: Any,
-        path: str,
-        filters: dict[str, Any] | None,
-    ) -> list[dict[str, Any]]:
-        """Executa a consulta local usando uma instalacao DuckDB existente."""
+    async def _run_parquet_engine(
+        engine, path, filters, duckdb_cli_path=None, validation=False
+    ):
+        if engine == "duckdb_cli":
+            executable = duckdb_cli_path or await asyncio.to_thread(find_duckdb_cli_on_path)
+            if executable is None:
+                raise FileNotFoundError(
+                    "DuckDB CLI ausente no PATH e ainda nao provisionado"
+                )
 
-        connection = duckdb.connect(":memory:")
-        try:
-            query = "SELECT * FROM read_parquet(?)"
-            params: list[Any] = [path]
-            if filters:
-                clauses = []
-                for key, value in filters.items():
-                    if not key.replace("_", "").isalnum():
-                        raise AneelClientError(f"Campo Parquet invalido: {key}")
-                    clauses.append(f'"{key}" = ?')
-                    params.append(value)
+            def literal(value):
+                return "'" + str(value).replace("'", "''") + "'"
+
+            clauses = []
+            for key, value in (filters or {}).items():
+                if not key.replace("_", "").isalnum():
+                    raise ValueError("Campo Parquet invalido")
+                clauses.append('"' + key + '" = ' + literal(value))
+            query = "SELECT version() AS version" if validation else (
+                "SET threads=1; SET memory_limit='256MB'; SELECT * FROM read_parquet("
+                + literal(path)
+                + ")"
+            )
+            if clauses and not validation:
                 query += " WHERE " + " AND ".join(clauses)
-            cursor = connection.execute(query, params)
-            columns = [item[0] for item in cursor.description]
-            return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
+            command = [
+                sys.executable,
+                "-B",
+                str(Path(__file__).with_name("parquet_worker.py")),
+                "duckdb_cli",
+                executable,
+            ]
+            payload = query + ";"
+        else:
+            command = [
+                sys.executable,
+                "-B",
+                str(Path(__file__).with_name("parquet_worker.py")),
+                engine,
+            ]
+            payload = json.dumps({"path": path, "filters": filters})
+        # A saida e drenada com limite; timeout/cancelamento matam e recolhem o filho.
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdin=asyncio.subprocess.PIPE,
+            env={**os.environ, "PYTHONPATH": os.pathsep.join(str(p) for p in sys.path if p)},
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        async def read_limited(stream, limit):
+            data = bytearray()
+            while chunk := await stream.read(65536):
+                data.extend(chunk)
+                if len(data) > limit:
+                    raise ValueError("Saida do leitor Parquet excedeu o limite")
+            return bytes(data)
+
+        async def communicate():
+            process.stdin.write(payload.encode())
+            await process.stdin.drain()
+            process.stdin.close()
+            stdout, stderr = await asyncio.gather(
+                read_limited(process.stdout, PARQUET_MAX_RESULT_BYTES),
+                read_limited(process.stderr, 64 * 1024),
+            )
+            await process.wait()
+            return stdout, stderr
+
+        task = asyncio.create_task(communicate())
+        try:
+            stdout, stderr = await asyncio.wait_for(task, PARQUET_PROCESS_TIMEOUT_SECONDS)
+            if process.returncode:
+                raise RuntimeError(
+                    f"exit={process.returncode}: " + stderr[:2048].decode("utf-8", "replace")
+                )
+            records = await asyncio.to_thread(
+                json.loads, b"[]" if engine == "duckdb_cli" and not stdout.strip() else stdout
+            )
+            if not isinstance(records, list) or any(not isinstance(row, dict) for row in records):
+                raise ValueError("Resposta Parquet invalida")
+            return records
         finally:
-            connection.close()
-
-    @staticmethod
-    def _query_parquet_pyarrow_sync(
-        parquet: Any,
-        path: str,
-        filters: dict[str, Any] | None,
-    ) -> list[dict[str, Any]]:
-        """Executa a consulta local usando PyArrow com filtros pushdown."""
-
-        arrow_filters = [
-            (key, "=", value)
-            for key, value in (filters or {}).items()
-        ]
-        table = parquet.read_table(path, filters=arrow_filters or None)
-        return table.to_pylist()
+            if process.returncode is None:
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+                await process.wait()
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     @staticmethod
     def _query_parquet_sync(

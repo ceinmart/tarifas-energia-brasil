@@ -1,6 +1,7 @@
-"""Versao: 0.2.2
+"""Versao: 0.2.3
 Criado em: 2026-04-22 21:41:36 -03:00
 Alterado em: 2026-08-12 (America/Sao_Paulo)
+Alterado em: 2026-08-31 22:01 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -33,6 +34,8 @@ from .calculators import (
     disponibilidade_minima_kwh,
 )
 from .const import (
+    ALERTA_DIAS_PADRAO,
+    CONF_ALERTA_DIAS,
     CONF_CONCESSIONARIA,
     CONF_DIA_LEITURA,
     CONF_ENTIDADE_CONSUMO,
@@ -97,6 +100,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
         self._aneel_client = AneelClient(
             async_get_clientsession(hass),
             executor_job=hass.async_add_executor_job,
+            duckdb_cli_root=hass.config.path(DOMAIN, "bin"),
         )
         self._state_store: Store[dict[str, Any]] = Store(
             hass=hass,
@@ -406,6 +410,12 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
         if self._unsub_state_listeners:
             return
 
+        from homeassistant.helpers.event import async_track_time_interval
+
+        self._unsub_state_listeners.append(async_track_time_interval(
+            self.hass, self._async_check_freshness, timedelta(hours=1)
+        ))
+        await self._async_check_freshness()
         tracked = []
         for entity_id in (
             self._effective_value(CONF_ENTIDADE_CONSUMO),
@@ -1347,6 +1357,110 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
             }
         )
 
+    def freshness_attributes(self, now=None) -> dict[str, Any]:
+        """Idade baseada nas coletas externas, nunca nos eventos dos sensores."""
+        now = now or datetime.now().astimezone()
+        snapshot = self.data
+        dates = []
+        unknown = snapshot is None or not snapshot.coletas_por_chave
+        if snapshot is not None:
+            for collected_at in {m.ultima_coleta for m in snapshot.coletas_por_chave.values()}:
+                collected = self._as_datetime_or_none(collected_at)
+                if collected is None or collected > now:
+                    unknown = True
+                else:
+                    dates.append(collected)
+        oldest = min(dates) if dates and not unknown else None
+        age = max(0.0, (now - oldest).total_seconds() / 86400) if oldest else None
+        days = max(1, int(self._effective_value(CONF_ALERTA_DIAS, ALERTA_DIAS_PADRAO)))
+        diagnostics = snapshot.diagnosticos if snapshot else {}
+        return {
+            "ultima_coleta_bem_sucedida": oldest.isoformat() if oldest else None,
+            "ultima_tentativa": diagnostics.get("ultima_tentativa"),
+            "idade_dados_dias": round(age, 3) if age is not None else None,
+            "dados_desatualizados": age is None or age >= days,
+            "usando_dados_anteriores": bool(diagnostics.get("usou_ultimo_valor_valido")),
+        }
+
+    async def _async_check_freshness(self, now=None) -> None:
+        attrs = self.freshness_attributes(now)
+        if self.data is not None:
+            await self._async_notify_collection(
+                self.data.diagnosticos.get("mensagem_erro"), attrs=attrs
+            )
+            self.async_update_listeners()
+
+    async def _async_notify_collection(self, error=None, *, attrs=None) -> None:
+        """Falha de notificacao nao pode invalidar uma coleta bem-sucedida."""
+        try:
+            await self._async_publish_collection_notification(error, attrs=attrs)
+        except Exception:
+            _LOGGER.exception("Falha ao publicar notificacao de coleta")
+
+    async def _async_publish_collection_notification(self, error=None, *, attrs=None) -> None:
+        """Notificacao por entrada, sem download implicito nem resultado parcial."""
+        from urllib.parse import urlencode
+
+        attrs = attrs or self.freshness_attributes()
+        notification_id = f"{DOMAIN}_{self.entry.entry_id}_coleta"
+        # Sem snapshot durante o setup: aguarda a primeira tentativa antes de alertar.
+        if not error and not attrs["dados_desatualizados"]:
+            self._collection_notification_message = None
+            await self.hass.services.async_call(
+                "persistent_notification",
+                "dismiss",
+                {"notification_id": notification_id},
+                blocking=True,
+            )
+            return
+        days = self._effective_value(CONF_ALERTA_DIAS, ALERTA_DIAS_PADRAO)
+        status = (
+            f"Dados desatualizados: limite de {days} dias atingido."
+            if attrs["idade_dados_dias"] is not None
+            else "Sem data de coleta valida conhecida."
+        )
+        if not attrs["dados_desatualizados"]:
+            status = (
+                "A atualizacao falhou; os dados anteriores ainda estao dentro do prazo configurado."
+            )
+        link = "https://my.home-assistant.io/redirect/developer_call_service/?" + urlencode(
+            {
+                "service": f"{DOMAIN}.atualizar_via_csv",
+            }
+        )
+        message = (
+            f"{status}\n\nUltima coleta completa conhecida: "
+            f"{attrs['ultima_coleta_bem_sucedida'] or 'desconhecida'}.\n\n"
+            + (
+                "Os ultimos valores validos foram preservados. "
+                if self.data is not None
+                else "Ainda nao existe resultado valido para mostrar. "
+            )
+            + "Nenhum CSV sera baixado automaticamente.\n\n"
+            f"[Abrir atualizacao manual por CSV]({link}) — selecione a entrada desta concessionaria e o dataset; clique em **Executar acao**. "
+            "O download pode ser grande. Tambem disponivel em Ferramentas do desenvolvedor > Acoes: "
+            "`tarifas_energia_brasil.atualizar_via_csv`.\n\n"
+            f"Entrada: `{self.entry.entry_id}`. Escolha `fio_b` para somente Fio B, ou `todos`.\n\n"
+            + (
+                "Houve falha na coleta. Consulte o log e os diagnosticos para detalhes."
+                if error
+                else ""
+            )
+        )
+        if getattr(self, "_collection_notification_message", None) == message:
+            return
+        await self.hass.services.async_call(
+            "persistent_notification",
+            "create",
+            {
+                "notification_id": notification_id,
+                "title": f"Tarifas Energia Brasil — {self._effective_value(CONF_CONCESSIONARIA)}",
+                "message": message,
+            },
+            blocking=True,
+        )
+        self._collection_notification_message = message
+
     def start_manual_csv_update(self, dataset: str) -> None:
         """Inicia uma coleta CSV manual em background para esta entrada."""
 
@@ -1496,6 +1610,12 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
             RuntimeError,
             Exception,
         ) as err:
+            if self.data is not None:
+                self.data.diagnosticos.update({"ultima_tentativa": now.isoformat(),
+                    "mensagem_erro": str(err), "ultima_falha": now.isoformat(),
+                    "usou_ultimo_valor_valido": True})
+                self._schedule_state_save()
+            await self._async_notify_collection(str(err))
             retry_interval = self._failure_retry_interval(has_snapshot=self.data is not None)
             retry_at = now + retry_interval
             if self.data is not None:
@@ -1528,7 +1648,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
                 )
                 self._schedule_state_save()
                 return ResultadoCalculo(
-                    atualizado_em=now,
+                    atualizado_em=self.data.atualizado_em,
                     concessionaria=self.data.concessionaria,
                     valores=self.data.valores,
                     coletas_por_chave=self.data.coletas_por_chave,
@@ -1723,6 +1843,8 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
             "consumo_mensal_kwh_apurado": consumo_mensal_kwh,
             "consumo_bootstrap_sem_historico": not possuia_historico_consumo,
             "mensagem_erro": None,
+            "ultima_tentativa": now.isoformat(),
+            "usou_ultimo_valor_valido": False,
             "estimativa_tarifa_branca_sem_posto_real": self._tarifa_branca_low_confidence,
             "competencia_bandeira": bandeira_data["competencia"],
             "tributos_competencia": tributos_data.competencia,
@@ -1746,6 +1868,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
             diagnosticos=diagnosticos,
         )
         self.data = snapshot
+        await self._async_notify_collection()
         self._update_dynamic_diagnosticos(now)
         self._schedule_state_save()
         return snapshot

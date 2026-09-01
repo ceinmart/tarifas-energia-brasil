@@ -1,5 +1,6 @@
-"""Versao: 0.1.0
+"""Versao: 0.2.3
 Criado em: 2026-04-23 10:00:00 -03:00
+Alterado em: 2026-08-31 22:01 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -359,3 +360,22 @@ def test_config_flow_normalizes_legacy_sql_method_to_datastore_search():
 
     assert result["type"] == "create_entry"
     assert result["data"][CONF_METODO_ANEEL] == METODO_ANEEL_BUSCA_DADOS
+
+
+def test_config_and_options_expose_stale_alert_days():
+    key = 'alerta_dados_desatualizados_dias'
+    for options in (False, True):
+        schema = TarifasEnergiaBrasilConfigFlow._build_schema(
+            {key: 7}, incluir_opcoes_grupo=options)
+        fields = {marker.schema: (marker, field) for marker, field in schema.schema.items()}
+        marker, field = fields[key]
+        assert marker.default() == 7
+        assert field.config.min == 1
+        assert field.config.max == 365
+    entry = sys.modules['homeassistant.config_entries'].ConfigEntry(data={}, options={})
+    flow = TarifasEnergiaBrasilOptionsFlow(entry)
+    result = asyncio.run(flow.async_step_init({
+        CONF_CONCESSIONARIA: 'CPFL-PIRATINING',
+        CONF_ENTIDADE_CONSUMO: 'sensor.consumo_total', key: 9,
+    }))
+    assert result['data'][key] == 9

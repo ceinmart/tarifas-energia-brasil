@@ -1,5 +1,6 @@
-"""Versao: 0.1.0
+"""Versao: 0.2.3
 Criado em: 2026-04-23 16:10:00 -03:00
+Alterado em: 2026-08-31 22:01 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
 """
@@ -342,6 +343,10 @@ def test_entities_share_single_device_and_keep_unique_ids():
     by_key = {description.chave_valor: description for description in descriptions}
 
     class DummyCoordinator:
+        def freshness_attributes(self):
+            return {"ultima_coleta_bem_sucedida": "2026-04-22T18:00:00-03:00",
+                    "dados_desatualizados": True}
+
         data = None
 
     regular_entity = TarifasEnergiaBrasilSensor(
@@ -393,6 +398,10 @@ def test_numeric_native_value_is_rounded_to_four_decimal_places():
     )
 
     class DummyCoordinator:
+        def freshness_attributes(self):
+            return {"ultima_coleta_bem_sucedida": "2026-04-22T18:00:00-03:00",
+                    "dados_desatualizados": True}
+
         data = types.SimpleNamespace(
             valores={"tarifa_convencional_final_r_kwh": 0.787910097997443},
             concessionaria="CPFL-PIRATINING",
@@ -430,6 +439,10 @@ def test_extra_state_attributes_are_minimal_by_default():
             return {"metodo_acesso": "datastore_search", "usou_fallback": False}
 
     class DummyCoordinator:
+        def freshness_attributes(self):
+            return {"ultima_coleta_bem_sucedida": "2026-04-22T18:00:00-03:00",
+                    "dados_desatualizados": True}
+
         data = types.SimpleNamespace(
             valores={"tarifa_convencional_final_r_kwh": 0.7879},
             concessionaria="CPFL-PIRATINING",
@@ -446,7 +459,9 @@ def test_extra_state_attributes_are_minimal_by_default():
 
     assert entity.extra_state_attributes == {
         "concessionaria": "CPFL-PIRATINING",
-        "ultima_atualizacao": "2026-04-23T18:00:00-03:00",
+        "ultima_atualizacao": "2026-04-22T18:00:00-03:00",
+        "ultima_coleta_bem_sucedida": "2026-04-22T18:00:00-03:00",
+        "dados_desatualizados": True,
     }
 
 
@@ -471,6 +486,10 @@ def test_extra_state_attributes_include_diagnostics_when_enabled():
             return {"metodo_acesso": "datastore_search", "usou_fallback": False}
 
     class DummyCoordinator:
+        def freshness_attributes(self):
+            return {"ultima_coleta_bem_sucedida": "2026-04-22T18:00:00-03:00",
+                    "dados_desatualizados": True}
+
         data = types.SimpleNamespace(
             valores={"tarifa_convencional_final_r_kwh": 0.7879},
             concessionaria="CPFL-PIRATINING",
@@ -508,6 +527,10 @@ def test_sensor_restores_previous_numeric_state_when_coordinator_has_no_snapshot
     )
 
     class DummyCoordinator:
+        def freshness_attributes(self):
+            return {"ultima_coleta_bem_sucedida": "2026-04-22T18:00:00-03:00",
+                    "dados_desatualizados": True}
+
         data = None
         last_update_success = False
 
@@ -538,6 +561,10 @@ def test_sensor_restores_previous_text_state_when_coordinator_has_no_snapshot():
     )
 
     class DummyCoordinator:
+        def freshness_attributes(self):
+            return {"ultima_coleta_bem_sucedida": "2026-04-22T18:00:00-03:00",
+                    "dados_desatualizados": True}
+
         data = None
         last_update_success = False
 
