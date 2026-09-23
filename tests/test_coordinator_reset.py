@@ -1138,6 +1138,7 @@ def test_continuous_drop_recovery_does_not_duplicate_energy():
     _feed(c, start + timedelta(seconds=1), generated=10)
     assert c._last_geracao_total_kwh == 100
     assert c._energy_quality["geracao"]["situacao"] == "queda_ambigua"
+    assert c._geracao_reset_detectado == 0
     _, generation, _, _ = _feed(c, start + timedelta(seconds=2), generated=101)
     assert generation[QUEBRA_MENSAL] == pytest.approx(1)
 
@@ -1150,6 +1151,7 @@ def test_explicit_counter_policies(policy, next_value, expected):
     _, generation, _, _ = _feed(c, start + timedelta(seconds=1), generated=next_value)
     assert generation[QUEBRA_MENSAL] == pytest.approx(expected)
     assert c._last_geracao_total_kwh == next_value
+    assert c._geracao_reset_detectado == (1 if policy == "reset" else 0)
 
 
 def test_signed_drop_then_recovery_has_zero_net_delta():

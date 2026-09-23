@@ -712,7 +712,7 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
                 status = "correcao_periodo_estimado"
             elif policy == "reset":
                 # Count only observable energy since zero; the unobserved tail is unknown.
-                context.update(delta_kwh=value, reset_detected=False, start=now)
+                context.update(delta_kwh=value, reset_detected=False, source_reset=True, start=now)
                 status = "reset_com_lacuna"
             elif policy == "rollover":
                 limit = float(self._effective_value(f"limite_{name}_kwh", 0) or 0)
@@ -1231,11 +1231,11 @@ class TarifasEnergiaBrasilCoordinator(DataUpdateCoordinator[ResultadoCalculo]):
                 injecao_delta,
             )
 
-        if consumo_delta is not None and consumo_delta.get("reset_detected"):
+        if consumo_delta is not None and consumo_delta.get("source_reset"):
             self._consumo_reset_detectado += 1
-        if geracao_delta is not None and geracao_delta.get("reset_detected"):
+        if geracao_delta is not None and geracao_delta.get("source_reset"):
             self._geracao_reset_detectado += 1
-        if injecao_delta is not None and injecao_delta.get("reset_detected"):
+        if injecao_delta is not None and injecao_delta.get("source_reset"):
             self._injecao_reset_detectado += 1
 
         delta_contexts = (consumo_delta, geracao_delta, injecao_delta)
