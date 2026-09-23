@@ -1,4 +1,5 @@
-"""Versao: 0.1.0
+"""Versao: 0.3.0
+Alterado em: 2026-09-23 10:57 -03:00 - Codex (ChatGPT)
 Criado em: 2026-04-23 16:45:00 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
@@ -301,21 +302,21 @@ def split_interval_by_midnight(
 ) -> list[tuple[datetime, datetime]]:
     """Quebra um intervalo em segmentos diários, respeitando meia-noite local."""
 
-    if end <= start:
+    if end.timestamp() <= start.timestamp():
         return []
 
     tzinfo = _resolve_reference_timezone(start)
     cursor = start
     segments: list[tuple[datetime, datetime]] = []
 
-    while cursor < end:
+    while cursor.timestamp() < end.timestamp():
         local = _as_reference_local(cursor)
         next_midnight = datetime.combine(
             local.date() + timedelta(days=1),
             time.min,
             tzinfo=tzinfo,
         )
-        segment_end = min(end, next_midnight)
+        segment_end = min(end, next_midnight, key=lambda value: value.timestamp())
         segments.append((cursor, segment_end))
         cursor = segment_end
     return segments
@@ -329,14 +330,14 @@ def split_interval_by_tarifa_branca(
 ) -> list[tuple[datetime, datetime, str]]:
     """Quebra um intervalo pelas trocas de posto tarifario e meia-noite."""
 
-    if end <= start:
+    if end.timestamp() <= start.timestamp():
         return []
 
     tzinfo = _resolve_reference_timezone(start)
     cursor = start
     segments: list[tuple[datetime, datetime, str]] = []
 
-    while cursor < end:
+    while cursor.timestamp() < end.timestamp():
         local = _as_reference_local(cursor)
         day = local.date()
         candidates = [datetime.combine(day + timedelta(days=1), time.min, tzinfo=tzinfo)]
@@ -344,10 +345,12 @@ def split_interval_by_tarifa_branca(
         if day.weekday() < 5 and day not in holidays:
             for boundary in schedule.boundary_times():
                 boundary_dt = datetime.combine(day, boundary, tzinfo=tzinfo)
-                if cursor < boundary_dt < end:
-                    candidates.append(boundary_dt)
+                for fold in (0, 1):
+                    candidate = boundary_dt.replace(fold=fold)
+                    if cursor.timestamp() < candidate.timestamp() < end.timestamp():
+                        candidates.append(candidate)
 
-        segment_end = min(min(candidates), end)
+        segment_end = min([*candidates, end], key=lambda value: value.timestamp())
         segments.append(
             (
                 cursor,
@@ -370,7 +373,7 @@ def ratear_delta_tarifa_branca(
     """Rateia delta de consumo pelos postos tarifarios com base no tempo."""
 
     allocations = {posto: 0.0 for posto in POSTOS_TARIFA_BRANCA}
-    if delta_kwh <= 0 or end <= start:
+    if delta_kwh <= 0 or end.timestamp() <= start.timestamp():
         return allocations, {
             "segment_count": 0,
             "interval_seconds": 0.0,
@@ -378,13 +381,24 @@ def ratear_delta_tarifa_branca(
         }
 
     segments = split_interval_by_tarifa_branca(start, end, schedule, holidays)
-    total_seconds = max((end - start).total_seconds(), 1.0)
-    for segment_start, segment_end, posto in segments:
-        duration = (segment_end - segment_start).total_seconds()
-        allocations[posto] += delta_kwh * (duration / total_seconds)
+    total_seconds = end.timestamp() - start.timestamp()
+    for (_, _, posto), amount in zip(segments, allocate_delta(segments, delta_kwh), strict=True):
+        allocations[posto] += amount
 
     return allocations, {
         "segment_count": len(segments),
         "interval_seconds": total_seconds,
         "low_confidence": (end - start) >= LONG_INTERVAL_THRESHOLD,
     }
+
+
+def allocate_delta(segments: list[tuple], delta_kwh: float) -> list[float]:
+    """Conserve the input delta using elapsed time (including DST) and a final residue."""
+    if not segments:
+        raise ValueError("A nonzero delta requires an allocation segment")
+    durations = [max(0.0, end.timestamp() - start.timestamp()) for start, end, *_ in segments]
+    total = sum(durations)
+    if total == 0:
+        return [0.0] * (len(segments) - 1) + [delta_kwh]
+    amounts = [delta_kwh * duration / total for duration in durations[:-1]]
+    return amounts + [delta_kwh - sum(amounts)]

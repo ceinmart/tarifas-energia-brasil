@@ -27,10 +27,10 @@ Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de
 
 ## Status
 
-- Ultima versao publicada: [`0.2.4`](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.4).
+- Ultima versao publicada: [`0.3.0`](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.3.0).
 - Escopo inicial: base funcional da integracao + MVP com concessionarias suportadas.
 - Concessionaria obrigatoria do MVP: `CPFL-PIRATINING`.
-- Documentacao tecnica de referencia: [DOCUMENTACAO_CODIGO_0.2.4.md](./docs/releases/DOCUMENTACAO_CODIGO_0.2.4.md).
+- Documentacao tecnica de referencia: [DOCUMENTACAO_CODIGO_0.3.0.md](./docs/releases/DOCUMENTACAO_CODIGO_0.3.0.md).
 - Historico completo de mudancas: [CHANGELOG](./docs/releases/CHANGELOG.md).
 
 Detalhes de compatibilidade: [Parquet isolado e alertas](./docs/compatibilidade_parquet_e_alertas.md).
@@ -44,7 +44,7 @@ Detalhes de compatibilidade: [Parquet isolado e alertas](./docs/compatibilidade_
 5. Reinicie o Home Assistant.
 6. Adicione a integracao em `Configuracoes > Dispositivos e Servicos`.
 
-Na versao 0.2.3, os modulos Parquet continuam opcionais. Se a API e o modulo
+Desde a versao 0.2.3, os modulos Parquet continuam opcionais. Se a API e o modulo
 DuckDB falharem, a integracao baixa sob demanda o DuckDB CLI oficial compativel,
 confere SHA-256, testa-o em processo separado e o guarda na pasta persistente
 `/config/tarifas_energia_brasil/bin`. Nao ha compilacao. Consulte a
@@ -89,6 +89,36 @@ Padraos de grupos:
 
 - Novas instalacoes: `Tarifa Branca` inicia desabilitada para reduzir ruido visual.
 - Entries antigas: o grupo `Tarifa Branca` permanece visivel por compatibilidade ate o usuario optar por ocultar.
+
+## Contadores de energia e atualizacoes lentas (0.3.0)
+
+Configure apenas energia **acumulada**. Wh e MWh sao convertidos para kWh; fontes
+sem unidade mantem a interpretacao legada de kWh. Potencia, energia por intervalo
+(`measurement`), valores nao finitos e entidades restauradas sao rejeitados.
+
+Cada fonte tem uma politica configuravel:
+
+- `continuous` (padrao, inclusive em entradas existentes sem a opcao): uma queda
+  retém a referencia e sinaliza reconciliacao. Nao presume reset.
+- `signed`: aceita correcoes negativas no periodo de chegada, sem duplicar a recuperacao.
+- `reset`: uma queda significa zeramento real; conta o valor observado apos zero,
+  mas sinaliza energia potencialmente nao observada antes do reset.
+- `rollover`: uma queda significa uma volta no limite exclusivo configurado em kWh.
+  Multiplas voltas entre leituras nao sao detectaveis; exige conhecimento do contador.
+
+**Compatibilidade:** antes da 0.3.0, qualquer queda reancorava a fonte automaticamente.
+Se seu contador zera regularmente, selecione `reset`; se recebe correcoes, selecione
+`signed`. O padrao conservador evita tratar uma leitura antiga como um novo consumo.
+
+Referencias independentes conservam os deltas mesmo com atualizacoes em ritmos
+muito diferentes. O rateio entre dias, ciclos e postos e uma estimativa proporcional
+ao tempo; ausencia de leituras intervalares impede provar a distribuicao exata.
+Lacunas de ate 366 dias sao rateadas; acima disso, o delta fica pendente de
+reconciliacao, sem substituir a referencia. Ciclos SCEE aguardam as fontes
+necessarias; fontes sem novas variacoes podem adiar seu fechamento.
+
+O total historico existente nao e corrigido automaticamente. Consulte os
+[diagnosticos, limites e a action de reconciliacao mensal](./docs/releases/DOCUMENTACAO_CODIGO_0.3.0.md).
 
 ## Concessionarias
 
@@ -211,7 +241,7 @@ Exemplos basicos:
 
 ## Como ver a ultima atualizacao
 
-Na versao 0.2.3, os atributos basicos incluem `ultima_coleta_bem_sucedida`,
+Desde a versao 0.2.3, os atributos basicos incluem `ultima_coleta_bem_sucedida`,
 `ultima_tentativa`, `idade_dados_dias`, `dados_desatualizados` e
 `usando_dados_anteriores`. `ultima_atualizacao` passa a representar a coleta
 externa mais antiga usada no snapshot, sem avancar em falhas ou eventos de consumo.
@@ -351,7 +381,7 @@ Observacoes:
    - `valor_consumo_faturado = max(valor_disponibilidade, valor_consumo_scee)`
    - consumo, geracao e injecao acumulados agora sao apurados de forma incremental no tempo, com rateio por virada de dia/semana/ciclo mensal
    - quando a entidade de injecao existe, ela e usada como energia compensavel do SCEE
-   - auto-consumo usa `max(geracao_acumulada - injecao_acumulada, 0)` quando as duas entidades estao configuradas
+   - auto-consumo usa `geracao_acumulada - injecao_acumulada` (pode ficar temporariamente negativo por assincronia) quando as duas entidades estao configuradas
    - creditos continuam persistidos e consumidos do mais antigo para o mais novo
 
 Limitacoes atuais da release:
@@ -377,7 +407,7 @@ Regra adicional implementada:
 ## Links de versao
 
 - [Runbook: coleta de stack do HA bloqueado](./docs/coleta_stack_ha_bloqueado.md)
-- [Documentacao tecnica da versao 0.2.4](./docs/releases/DOCUMENTACAO_CODIGO_0.2.4.md)
+- [Documentacao tecnica da versao 0.3.0](./docs/releases/DOCUMENTACAO_CODIGO_0.3.0.md)
 - [Changelog completo](./docs/releases/CHANGELOG.md)
-- [Release 0.2.4 no GitHub](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.2.4)
+- [Release 0.3.0 no GitHub](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.3.0)
 - [Todas as releases](https://github.com/ceinmart/tarifas-energia-brasil/releases)

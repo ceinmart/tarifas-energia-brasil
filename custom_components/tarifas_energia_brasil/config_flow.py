@@ -1,4 +1,5 @@
-"""Versao: 0.2.3
+"""Versao: 0.3.0
+Alterado em: 2026-09-23 10:57 -03:00 - Codex (ChatGPT)
 Criado em: 2026-04-22 21:41:36 -03:00
 Alterado em: 2026-08-10 (America/Sao_Paulo)
 Alterado em: 2026-08-31 22:01 -03:00
@@ -192,6 +193,13 @@ class TarifasEnergiaBrasilConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 default=atributos_extras_habilitados(defaults),
             ): bool,
         }
+
+        for source in ("consumo", "geracao", "injecao"):
+            schema[vol.Optional(f"politica_{source}", default=defaults.get(f"politica_{source}", "continuous"))] = selector.SelectSelector(
+                selector.SelectSelectorConfig(options=["continuous", "reset", "signed", "rollover"],
+                                              mode=selector.SelectSelectorMode.DROPDOWN)
+            )
+            schema[vol.Optional(f"limite_{source}_kwh", default=defaults.get(f"limite_{source}_kwh", 0))] = vol.All(vol.Coerce(float), vol.Range(min=0))
 
         if incluir_opcoes_grupo:
             if defaults.get(CONF_ENTIDADE_GERACAO) or defaults.get(CONF_ENTIDADE_INJECAO):

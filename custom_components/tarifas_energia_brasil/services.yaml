@@ -37,3 +37,37 @@ cancelar_atualizacao_csv:
       selector:
         config_entry:
           integration: tarifas_energia_brasil
+
+reconciliar_mensal:
+  name: Reconciliar energia mensal
+  description: Previa por padrao. Aplicacao absoluta com backup; requer fontes atuais e ciclo corretos. Nao reconstroi historico, postos nem creditos passados.
+  fields:
+    config_entry_id:
+      name: Entrada
+      required: true
+      selector:
+        config_entry:
+          integration: tarifas_energia_brasil
+    ciclo:
+      name: Ciclo mensal
+      description: Chave exibida nos diagnosticos, por exemplo 2026-08-D24.
+      required: true
+      selector:
+        text:
+    totais_kwh:
+      name: Totais mensais corretos
+      description: Objeto com consumo, geracao e injecao, em kWh.
+      required: true
+      selector:
+        object:
+    referencias_kwh:
+      name: Leituras acumuladas atuais
+      description: Objeto com consumo, geracao e injecao, em kWh; devem coincidir com as fontes.
+      required: true
+      selector:
+        object:
+    aplicar:
+      name: Aplicar
+      default: false
+      selector:
+        boolean:

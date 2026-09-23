@@ -1,4 +1,5 @@
-"""Versao: 0.1.0
+"""Versao: 0.3.0
+Alterado em: 2026-09-23 10:57 -03:00 - Codex (ChatGPT)
 Criado em: 2026-04-22 21:41:36 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
@@ -12,9 +13,9 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_ENTIDADE_CONSUMO, CONF_ENTIDADE_GERACAO, DOMAIN
+from .const import CONF_ENTIDADE_CONSUMO, CONF_ENTIDADE_GERACAO, CONF_ENTIDADE_INJECAO, DOMAIN
 
-TO_REDACT = {CONF_ENTIDADE_CONSUMO, CONF_ENTIDADE_GERACAO}
+TO_REDACT = {CONF_ENTIDADE_CONSUMO, CONF_ENTIDADE_GERACAO, CONF_ENTIDADE_INJECAO}
 
 
 async def async_get_config_entry_diagnostics(

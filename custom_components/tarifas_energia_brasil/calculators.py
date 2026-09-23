@@ -1,4 +1,5 @@
-"""Versao: 0.1.0
+"""Versao: 0.3.0
+Alterado em: 2026-09-23 10:57 -03:00 - Codex (ChatGPT)
 Criado em: 2026-04-22 21:41:36 -03:00
 Criado por: Codex
 Projeto/pasta: ha.ext.tarifas
@@ -292,7 +293,7 @@ def calcular_auto_consumo_kwh(
 ) -> float:
     """Calcula auto-consumo como energia gerada menos energia injetada."""
 
-    return max(max(gerado_kwh, 0.0) - max(injetado_kwh, 0.0), 0.0)
+    return gerado_kwh - injetado_kwh
 
 
 def calcular_scee_simplificado(

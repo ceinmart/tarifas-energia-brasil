@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0 - 2026-09-23
+
+- Conserva deltas em intervalos menores que um segundo e em leituras lentas.
+- Referencias de leitura independentes por fonte; eventos repetidos nao encurtam a janela.
+- Politicas explicitas para contador continuo, correcao assinada, reset e rollover.
+- Preserva deltas ambiguos e lacunas acima de 366 dias para reconciliacao.
+- Autoconsumo admite diferencas negativas temporarias; nao trunca o balanço.
+- Converte Wh/MWh para kWh e rejeita potencia, measurement, restaurados e nao finitos.
+- Persistencia consistente de totais/referencias e fechamento mensal SCEE pendente ate chegada das fontes.
+- Rateio usa tempo real em transicoes de horario de verao; dias 29–31 usam o ultimo dia nos meses curtos.
+- Action `reconciliar_mensal` oferece previa e aplicacao absoluta com backup e controle de concorrencia.
+- Entradas existentes sem politica passam ao padrao conservador `continuous`; revise contadores que zeram.
+- [Documentacao, migracao e limites da 0.3.0](DOCUMENTACAO_CODIGO_0.3.0.md).
+
 ## 0.2.4 - 2026-09-01
 
 - Move a deteccao de arquitetura e libc do provisionador DuckDB para uma thread,

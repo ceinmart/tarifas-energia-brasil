@@ -1,4 +1,5 @@
-"""Versao: 0.2.0
+"""Versao: 0.3.0
+Alterado em: 2026-09-23 10:57 -03:00 - Codex (ChatGPT)
 Criado em: 2026-04-22 21:41:36 -03:00
 Alterado em: 2026-08-10 (America/Sao_Paulo)
 Criado por: Codex
@@ -40,7 +41,30 @@ CSV_DATASETS = ("tarifas", "fio_b", "bandeira", "todos")
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Configura integracao via UI; YAML nao e utilizado."""
 
+    from homeassistant.core import SupportsResponse
+
     hass.data.setdefault(DOMAIN, {})
+
+    async def _reconcile_month(call: object) -> dict:
+        coordinator = _coordinator_from_call(hass, call)
+        try:
+            return await coordinator.async_reconcile_month(
+                call.data["ciclo"], call.data["totais_kwh"], call.data["referencias_kwh"],
+                call.data["aplicar"],
+            )
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+
+    quantities = {vol.Required(name): vol.Coerce(float) for name in ("consumo", "geracao", "injecao")}
+    hass.services.async_register(
+        DOMAIN, "reconciliar_mensal", _reconcile_month,
+        schema=vol.Schema({vol.Required(ATTR_CONFIG_ENTRY_ID): cv.string,
+                           vol.Required("ciclo"): cv.string,
+                           vol.Required("totais_kwh"): quantities,
+                           vol.Required("referencias_kwh"): quantities,
+                           vol.Optional("aplicar", default=False): bool}),
+        supports_response=SupportsResponse.OPTIONAL,
+    )
     async def _update_csv(call: object) -> None:
         coordinator = _coordinator_from_call(hass, call)
         try:

@@ -1,4 +1,5 @@
-"""Versao: 0.2.3
+"""Versao: 0.3.0
+Alterado em: 2026-09-23 10:57 -03:00 - Codex (ChatGPT)
 Criado em: 2026-04-22 21:41:36 -03:00
 Alterado em: 2026-08-31 22:01 -03:00
 Criado por: Codex
@@ -587,6 +588,10 @@ class TarifasEnergiaBrasilSensor(CoordinatorEntity[TarifasEnergiaBrasilCoordinat
         }
         attrs.update(self.coordinator.freshness_attributes())
         attrs["ultima_atualizacao"] = attrs["ultima_coleta_bem_sucedida"]
+        diagnosticos = self.coordinator.data.diagnosticos
+        if self.entity_description.chave_valor.startswith("auto_consumo"):
+            for key in ("geracao_mensal_kwh_apurado", "injecao_mensal_kwh_apurado", "apuracao_fontes", "metodo_rateio"):
+                attrs[key] = diagnosticos.get(key)
         if not atributos_extras_habilitados(
             {
                 **self._entry.data,

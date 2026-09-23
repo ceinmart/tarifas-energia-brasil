@@ -15,7 +15,18 @@
           "tipo_fornecimento": "Tipo de fornecimento",
           "quebras_calculo": "Quebras de calculo",
           "habilitar_atributos_extras": "Informacoes extras nos atributos",
-          "alerta_dados_desatualizados_dias": "Alerta dados desatualizados em dias"
+          "alerta_dados_desatualizados_dias": "Alerta dados desatualizados em dias",
+          "politica_consumo": "Consumo: comportamento do contador",
+          "limite_consumo_kwh": "Consumo: limite exclusivo de rollover (kWh; 0 se nao usar)",
+          "politica_geracao": "Geracao: comportamento do contador",
+          "limite_geracao_kwh": "Geracao: limite exclusivo de rollover (kWh; 0 se nao usar)",
+          "politica_injecao": "Injecao: comportamento do contador",
+          "limite_injecao_kwh": "Injecao: limite exclusivo de rollover (kWh; 0 se nao usar)"
+        },
+        "data_description": {
+          "politica_consumo": "continuous: retem quedas ambiguas; reset: queda significa zeramento; signed: aceita correcao negativa; rollover: volta a zero no limite informado. Use apenas contadores acumulados de energia.",
+          "politica_geracao": "continuous: retem quedas ambiguas; reset: queda significa zeramento; signed: aceita correcao negativa; rollover: volta a zero no limite informado. Use apenas contadores acumulados de energia.",
+          "politica_injecao": "continuous: retem quedas ambiguas; reset: queda significa zeramento; signed: aceita correcao negativa; rollover: volta a zero no limite informado. Use apenas contadores acumulados de energia."
         }
       }
     },
@@ -51,7 +62,18 @@
           "tarifa_branca_inicio_intermediario_2": "Tarifa Branca - inicio intermediario 2",
           "tarifa_branca_fim_intermediario_2": "Tarifa Branca - fim intermediario 2",
           "tarifa_branca_feriados_extras": "Tarifa Branca - feriados extras",
-          "alerta_dados_desatualizados_dias": "Alerta dados desatualizados em dias"
+          "alerta_dados_desatualizados_dias": "Alerta dados desatualizados em dias",
+          "politica_consumo": "Consumo: comportamento do contador",
+          "limite_consumo_kwh": "Consumo: limite exclusivo de rollover (kWh; 0 se nao usar)",
+          "politica_geracao": "Geracao: comportamento do contador",
+          "limite_geracao_kwh": "Geracao: limite exclusivo de rollover (kWh; 0 se nao usar)",
+          "politica_injecao": "Injecao: comportamento do contador",
+          "limite_injecao_kwh": "Injecao: limite exclusivo de rollover (kWh; 0 se nao usar)"
+        },
+        "data_description": {
+          "politica_consumo": "continuous: retem quedas ambiguas; reset: queda significa zeramento; signed: aceita correcao negativa; rollover: volta a zero no limite informado. Use apenas contadores acumulados de energia.",
+          "politica_geracao": "continuous: retem quedas ambiguas; reset: queda significa zeramento; signed: aceita correcao negativa; rollover: volta a zero no limite informado. Use apenas contadores acumulados de energia.",
+          "politica_injecao": "continuous: retem quedas ambiguas; reset: queda significa zeramento; signed: aceita correcao negativa; rollover: volta a zero no limite informado. Use apenas contadores acumulados de energia."
         }
       }
     },
@@ -76,6 +98,10 @@
     "cancelar_atualizacao_csv": {
       "name": "Cancelar atualizacao CSV",
       "description": "Cancela a coleta CSV manual ativa."
+    },
+    "reconciliar_mensal": {
+      "name": "Reconciliar energia mensal",
+      "description": "Previa por padrao; aplica totais absolutos com backup e validacao das referencias."
     }
   }
 }

@@ -1,4 +1,5 @@
-"""Versao: 0.2.3
+"""Versao: 0.3.0
+Alterado em: 2026-09-23 10:57 -03:00 - Codex (ChatGPT)
 Criado em: 2026-04-23 17:20:00 -03:00
 Alterado em: 2026-08-12 (America/Sao_Paulo)
 Alterado em: 2026-08-31 22:01 -03:00
@@ -255,7 +256,7 @@ def test_long_incremental_interval_is_bounded_without_segmentation(monkeypatch):
     assert valores[QUEBRA_MENSAL] == pytest.approx(0.0)
 
 
-def test_tracked_events_for_three_sensors_are_coalesced_by_numeric_snapshot(monkeypatch):
+def test_tracked_events_always_refresh_quality_and_period_view(monkeypatch):
     coordinator = _build_coordinator()
     coordinator.data = types.SimpleNamespace(
         atualizado_em=None,
@@ -278,7 +279,7 @@ def test_tracked_events_for_three_sensors_are_coalesced_by_numeric_snapshot(monk
         lambda key, *_args: 1 if key == const_module.CONF_DIA_LEITURA else "sensor.test",
     )
     monkeypatch.setattr(coordinator, "_read_entity_kwh", lambda *_args: next(values))
-    monkeypatch.setattr(coordinator, "_process_energy_states", lambda **kwargs: process_calls.append(kwargs))
+    monkeypatch.setattr(coordinator, "_process_energy_states", lambda **kwargs: (process_calls.append(kwargs) or ({QUEBRA_MENSAL: 0.0}, {}, {}, {})))
     monkeypatch.setattr(coordinator, "_refresh_icms_dependent_valores", lambda **_kwargs: "test")
     monkeypatch.setattr(coordinator, "_apply_dynamic_valores_to_snapshot", lambda **_kwargs: None)
     monkeypatch.setattr(coordinator, "_update_dynamic_diagnosticos", lambda *_args: None)
@@ -300,7 +301,7 @@ def test_tracked_events_for_three_sensors_are_coalesced_by_numeric_snapshot(monk
     coordinator._last_injecao_total_kwh = 21.0
     coordinator._handle_tracked_state_change(event)
 
-    assert len(process_calls) == 1
+    assert len(process_calls) == 2
 
 
 def test_initial_failure_uses_short_retry_interval_without_cached_snapshot():
@@ -1061,6 +1062,9 @@ def test_periodic_freshness_check_is_unsubscribed(monkeypatch):
         return unsub
     monkeypatch.setattr(sys.modules['homeassistant.helpers.event'],
         'async_track_time_interval', subscribe, raising=False)
+    midnight_unsub = Mock()
+    monkeypatch.setattr(sys.modules['homeassistant.helpers.event'],
+        'async_track_time_change', lambda *args, **kwargs: midnight_unsub, raising=False)
     async def scenario():
         await coordinator.async_start_state_tracking()
         assert callbacks[0][1] == timedelta(hours=1)
@@ -1077,3 +1081,266 @@ def test_notification_failure_does_not_raise_or_trigger_download():
     coordinator.hass.services.async_call.side_effect = RuntimeError('notification unavailable')
     asyncio.run(coordinator._async_notify_collection('collection error'))
     assert coordinator.data.valores == {'fio_b': 1}
+
+
+# Regressions v0.3.0 — Codex (ChatGPT), 2026-09-23.
+def _energy_coordinator(**options):
+    c = _build_coordinator()
+    c.entry = types.SimpleNamespace(data={CONF_CONCESSIONARIA: "CPFL-PIRATINING",
+        "dia_leitura_reset_mensal": 24,
+        "entidade_consumo_kwh": "sensor.c", "entidade_geracao_kwh": "sensor.g",
+        "entidade_injecao_kwh": "sensor.i"}, options=options, entry_id="energy-test")
+    c._creditos_ledger = []
+    c._credito_estimado_atual_kwh = c._credito_consumido_estimado_atual_kwh = 0.0
+    c._ultimo_ciclo_mensal = None
+    c._last_csv_fallback_attempts = {}
+    c._consumo_tarifa_branca_state = c._new_posto_period_state()
+    c.data = None
+    for name in ("consumo", "geracao", "injecao"):
+        setattr(c, f"_last_{name}_total_kwh", None)
+        setattr(c, f"_last_{name}_timestamp", None)
+        setattr(c, f"_{name}_reset_detectado", 0)
+        setattr(c, f"_{name}_period_state", c._new_period_state())
+    return c
+
+
+def _feed(c, time, consumed=100.0, generated=100.0, exported=100.0):
+    return c._process_energy_states(time, consumed, generated, exported, 24, {})
+
+
+@pytest.mark.parametrize("seconds", [0.000001, 0.02, 0.04349, 0.2, 1, 60, 18000])
+def test_full_delta_conserved_for_any_positive_duration(seconds):
+    c = _energy_coordinator()
+    start = datetime(2026, 9, 22, tzinfo=UTC)
+    _feed(c, start)
+    consumed, generated, injected, postos = _feed(c, start + timedelta(seconds=seconds), 100.2, 100.3, 100.1)
+    assert consumed[QUEBRA_MENSAL] == pytest.approx(0.2)
+    assert generated[QUEBRA_MENSAL] == pytest.approx(0.3)
+    assert injected[QUEBRA_MENSAL] == pytest.approx(0.1)
+    assert sum(postos[QUEBRA_MENSAL].values()) == pytest.approx(0.2)
+
+
+def test_interleaving_sources_does_not_shorten_another_interval():
+    c = _energy_coordinator()
+    start = datetime(2026, 9, 22, tzinfo=UTC)
+    _feed(c, start)
+    _feed(c, start + timedelta(minutes=10), 101, 100, 100)
+    assert c._last_geracao_timestamp == start
+    _, generated, _, _ = _feed(c, start + timedelta(minutes=10, microseconds=1), 101, 102, 100)
+    assert generated[QUEBRA_MENSAL] == pytest.approx(2)
+    assert c._energy_quality["geracao"]["intervalo_segundos"] == pytest.approx(600.000001)
+
+
+def test_continuous_drop_recovery_does_not_duplicate_energy():
+    c = _energy_coordinator()
+    start = datetime(2026, 9, 22, tzinfo=UTC)
+    _feed(c, start)
+    _feed(c, start + timedelta(seconds=1), generated=10)
+    assert c._last_geracao_total_kwh == 100
+    assert c._energy_quality["geracao"]["situacao"] == "queda_ambigua"
+    _, generation, _, _ = _feed(c, start + timedelta(seconds=2), generated=101)
+    assert generation[QUEBRA_MENSAL] == pytest.approx(1)
+
+
+@pytest.mark.parametrize(("policy", "next_value", "expected"), [("signed", 90, -10), ("reset", 5, 5), ("rollover", 5, 15)])
+def test_explicit_counter_policies(policy, next_value, expected):
+    c = _energy_coordinator(politica_geracao=policy, limite_geracao_kwh=110)
+    start = datetime(2026, 9, 22, tzinfo=UTC)
+    _feed(c, start)
+    _, generation, _, _ = _feed(c, start + timedelta(seconds=1), generated=next_value)
+    assert generation[QUEBRA_MENSAL] == pytest.approx(expected)
+    assert c._last_geracao_total_kwh == next_value
+
+
+def test_signed_drop_then_recovery_has_zero_net_delta():
+    c = _energy_coordinator(politica_geracao="signed")
+    start = datetime(2026, 9, 22, tzinfo=UTC)
+    _feed(c, start)
+    _feed(c, start + timedelta(seconds=1), generated=90)
+    _, generation, _, _ = _feed(c, start + timedelta(seconds=2), generated=100)
+    assert generation[QUEBRA_MENSAL] == pytest.approx(0)
+
+
+def test_long_unavailable_interval_keeps_reference_and_recovers_delta():
+    c = _energy_coordinator()
+    start = datetime(2026, 6, 1, tzinfo=UTC)
+    _feed(c, start)
+    _feed(c, start + timedelta(days=5), None, None, None)
+    assert c._last_consumo_timestamp == start
+    _feed(c, start + timedelta(days=60), 160, 160, 160)
+    closed = sum(item.kwh for item in c._creditos_ledger)
+    assert closed == 0  # Equal imported/exported energy, no fabricated credits.
+    assert c._last_consumo_total_kwh == 160
+    assert c._incremental_long_intervals == 0
+
+
+def test_extreme_gap_remains_pending_instead_of_discarded():
+    c = _energy_coordinator()
+    start = datetime(2020, 1, 1, tzinfo=UTC)
+    _feed(c, start)
+    _feed(c, start + timedelta(days=1000), 150, 150, 150)
+    assert c._last_consumo_total_kwh == 100
+    assert c._last_consumo_timestamp == start
+    assert c._energy_quality["consumo"]["delta_pendente_kwh"] == 50
+
+
+def test_monthly_credit_closure_waits_for_export_then_is_idempotent():
+    c = _energy_coordinator()
+    start = datetime(2026, 9, 23, 23, 50, tzinfo=UTC)
+    _feed(c, start)
+    rollover = start + timedelta(minutes=20)
+    _feed(c, rollover, 110, 100, 100)
+    assert "2026-08-D24" in c._pending_cycles
+    assert c._creditos_ledger == []
+    _feed(c, rollover + timedelta(seconds=1), 110, 100, 120)
+    assert "2026-08-D24" not in c._pending_cycles
+    expected = sum(item.kwh for item in c._creditos_ledger)
+    assert expected > 0
+    _feed(c, rollover + timedelta(seconds=2), 110, 100, 120)
+    assert sum(item.kwh for item in c._creditos_ledger) == expected
+
+
+def test_snapshot_is_detached_and_restores_pending_cycles():
+    import asyncio
+    c = _energy_coordinator()
+    start = datetime(2026, 9, 23, 23, 50, tzinfo=UTC)
+    _feed(c, start)
+    _feed(c, start + timedelta(minutes=20), 110, 100, 100)
+    payload = c._serialize_state()
+    restored = _energy_coordinator()
+    class MemoryStore:
+        async def async_load(self):
+            return payload
+    restored._state_store = MemoryStore()
+    restored._state_loaded = False
+    asyncio.run(restored.async_ensure_state_loaded())
+    _feed(restored, start + timedelta(minutes=21), 110, 100, 120)
+    assert "2026-08-D24" not in restored._pending_cycles
+    assert "2026-08-D24" in payload["pending_cycles"]  # loaded object must not alias checkpoint
+
+
+def test_source_replacement_does_not_count_lifetime_difference():
+    c = _energy_coordinator()
+    start = datetime(2026, 9, 22, tzinfo=UTC)
+    _feed(c, start)
+    c.entry.options["entidade_geracao_kwh"] = "sensor.new"
+    _, generation, _, _ = _feed(c, start + timedelta(seconds=1), generated=5000)
+    assert generation[QUEBRA_MENSAL] == 0
+    assert c._energy_quality["geracao"]["reconciliacao_necessaria"]
+
+
+@pytest.mark.parametrize(("raw", "unit", "expected"), [("nan", "kWh", None), ("inf", "kWh", None), ("-1", "kWh", None), ("1200", "Wh", 1.2), ("1", "MWh", 1000), ("3", "kW", None)])
+def test_source_validation_and_energy_unit_conversion(raw, unit, expected):
+    c = _energy_coordinator()
+    state = types.SimpleNamespace(state=raw, attributes={"unit_of_measurement": unit})
+    c.hass = types.SimpleNamespace(states=types.SimpleNamespace(get=lambda _: state))
+    assert c._read_entity_kwh("sensor.x") == expected
+
+
+def test_generated_event_sequences_conserve_each_source():
+    import random
+    rng = random.Random(73)
+    c = _energy_coordinator()
+    instant = datetime(2026, 9, 22, tzinfo=UTC)
+    totals = [100., 100., 100.]
+    _feed(c, instant, *totals)
+    for _ in range(200):
+        instant += timedelta(microseconds=rng.randrange(1, 1000000))
+        totals[rng.randrange(3)] += rng.random()
+        values = _feed(c, instant, *totals)
+    for index in range(3):
+        assert values[index][QUEBRA_MENSAL] == pytest.approx(totals[index] - 100)
+    assert sum(values[3][QUEBRA_MENSAL].values()) == pytest.approx(totals[0] - 100)
+
+
+def test_dst_fall_back_interval_and_daily_weights():
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo("America/New_York")
+    start = datetime(2026, 11, 1, 1, 30, tzinfo=tz, fold=0)
+    end = datetime(2026, 11, 1, 1, 15, tzinfo=tz, fold=1)
+    schedule, _ = resolve_tarifa_branca_schedule({CONF_CONCESSIONARIA: "CPFL-PIRATINING"})
+    allocations, meta = tarifa_branca_module.ratear_delta_tarifa_branca(start, end, 5, schedule, set())
+    assert sum(allocations.values()) == pytest.approx(5)
+    assert meta["interval_seconds"] == 2700
+    segments = tarifa_branca_module.split_interval_by_midnight(datetime(2026, 11, 1, tzinfo=tz), datetime(2026, 11, 3, tzinfo=tz))
+    assert tarifa_branca_module.allocate_delta(segments, 49) == pytest.approx([25, 24])
+
+
+def test_day_31_cycle_clamps_to_last_day_of_short_month():
+    c = _energy_coordinator()
+    assert c._period_key(QUEBRA_MENSAL, datetime(2026, 2, 27), 31) == "2026-01-D31"
+    assert c._period_key(QUEBRA_MENSAL, datetime(2026, 2, 28), 31) == "2026-02-D31"
+
+
+
+def test_old_decreasing_event_does_not_override_reference():
+    c = _energy_coordinator(politica_geracao="reset")
+    now = datetime(2026, 9, 22, tzinfo=UTC)
+    _feed(c, now)
+    _feed(c, now - timedelta(seconds=1), generated=10)
+    assert c._last_geracao_total_kwh == 100
+    _feed(c, now, generated=101)
+    assert c._last_geracao_total_kwh == 100
+    _, generated, _, _ = _feed(c, now + timedelta(seconds=1), generated=101)
+    assert generated[QUEBRA_MENSAL] == pytest.approx(1)
+
+
+def test_negative_self_consumption_preserves_asynchronous_balance():
+    assert coordinator_module.calcular_auto_consumo_kwh(10, 12) == -2
+    assert coordinator_module.calcular_auto_consumo_kwh(15, 12) == 3
+
+
+def test_reconciliation_preview_apply_and_repeat_are_absolute(monkeypatch):
+    import asyncio
+    from copy import deepcopy
+    now = datetime.now(UTC)
+    c = _energy_coordinator()
+    _feed(c, now)
+    state = types.SimpleNamespace(state="100", attributes={"unit_of_measurement": "kWh"}, last_updated=now)
+    c.hass = types.SimpleNamespace(config=types.SimpleNamespace(time_zone="UTC"),
+        states=types.SimpleNamespace(get=lambda _: state))
+    backups = []
+    class MemoryStore:
+        def __init__(self, *args, **kwargs):
+            pass
+        async def async_save(self, payload):
+            backups.append(deepcopy(payload))
+    c._state_store = MemoryStore()
+    monkeypatch.setattr(coordinator_module, "Store", MemoryStore)
+    monkeypatch.setattr(c, "_handle_tracked_state_change", lambda _: None)
+    cycle = c._period_key(QUEBRA_MENSAL, now, 24)
+    totals = {"consumo": 30, "geracao": 20, "injecao": 10}
+    refs = dict.fromkeys(totals, 100)
+    preview = asyncio.run(c.async_reconcile_month(cycle, totals, refs))
+    assert not preview["aplicado"] and not backups
+    assert c._consumo_period_state[QUEBRA_MENSAL]["kwh"] == 0
+    for _ in range(2):
+        result = asyncio.run(c.async_reconcile_month(cycle, totals, refs, True))
+        assert result["aplicado"]
+        assert c._consumo_period_state[QUEBRA_MENSAL]["kwh"] == 30
+    assert backups[0]["consumo_period_state"][QUEBRA_MENSAL]["kwh"] == 0
+    with pytest.raises(ValueError, match="Referencia"):
+        asyncio.run(c.async_reconcile_month(cycle, totals, {**refs, "consumo": 99}, True))
+    with pytest.raises(ValueError, match="ciclo"):
+        asyncio.run(c.async_reconcile_month("2020-01-D24", totals, refs, True))
+
+
+def test_reconciliation_aborts_when_event_arrives_during_backup(monkeypatch):
+    import asyncio
+    now = datetime.now(UTC)
+    c = _energy_coordinator()
+    _feed(c, now)
+    state = types.SimpleNamespace(state="100", attributes={})
+    c.hass = types.SimpleNamespace(config=types.SimpleNamespace(time_zone="UTC"),
+        states=types.SimpleNamespace(get=lambda _: state))
+    class RacingStore:
+        def __init__(self, *args):
+            pass
+        async def async_save(self, payload):
+            c._last_consumo_total_kwh = 101
+    monkeypatch.setattr(coordinator_module, "Store", RacingStore)
+    cycle = c._period_key(QUEBRA_MENSAL, now, 24)
+    with pytest.raises(ValueError, match="Estado mudou"):
+        asyncio.run(c.async_reconcile_month(cycle, dict.fromkeys(("consumo", "geracao", "injecao"), 30),
+                                             dict.fromkeys(("consumo", "geracao", "injecao"), 100), True))
+    assert c._consumo_period_state[QUEBRA_MENSAL]["kwh"] == 0

@@ -17,5 +17,5 @@
     "custom_components.tarifas_energia_brasil"
   ],
   "requirements": [],
-  "version": "0.2.4"
+  "version": "0.3.0"
 }
