@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 - 2026-11-04
+
+- Reserva o consumo minimo de disponibilidade antes de aplicar creditos SCEE.
+- Consome creditos antigos primeiro e conserva a injecao excedente como saldo, sem gerar credito sintetico de disponibilidade.
+- Alinha a estimativa monetaria: tarifa cheia sobre os kWh nao compensados e Fio B apenas sobre os kWh abatidos.
+- [Documentacao, validacao e limites da 0.3.1](DOCUMENTACAO_CODIGO_0.3.1.md).
+
 ## 0.3.0 - 2026-09-23
 
 - Conserva deltas em intervalos menores que um segundo e em leituras lentas.

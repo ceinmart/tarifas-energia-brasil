@@ -27,10 +27,10 @@ Integracao customizada para Home Assistant que coleta tarifas ANEEL, tributos de
 
 ## Status
 
-- Ultima versao publicada: [`0.3.0`](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.3.0).
+- Ultima versao publicada: [`0.3.1`](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.3.1).
 - Escopo inicial: base funcional da integracao + MVP com concessionarias suportadas.
 - Concessionaria obrigatoria do MVP: `CPFL-PIRATINING`.
-- Documentacao tecnica de referencia: [DOCUMENTACAO_CODIGO_0.3.0.md](./docs/releases/DOCUMENTACAO_CODIGO_0.3.0.md).
+- Documentacao tecnica de referencia: [DOCUMENTACAO_CODIGO_0.3.1.md](./docs/releases/DOCUMENTACAO_CODIGO_0.3.1.md).
 - Historico completo de mudancas: [CHANGELOG](./docs/releases/CHANGELOG.md).
 
 Detalhes de compatibilidade: [Parquet isolado e alertas](./docs/compatibilidade_parquet_e_alertas.md).
@@ -315,9 +315,9 @@ Observacoes:
 | Bandeira vigente | `bandeira_vigente` | `sensor.bandeira_vigente` | texto | sem `state_class` | Sempre | Nome/cor da bandeira ativa na competencia retornada pela ANEEL. |
 | Adicional da bandeira | `adicional_bandeira_r_kwh` | `sensor.adicional_bandeira` | R$/kWh | `measurement` | Sempre | `adicional_bandeira_r_mwh / 1000`; aplicado sobre kWh faturado nos valores de conta. |
 | Indicador taxa minima | `indicador_taxa_minima` | `sensor.indicador_taxa_minima` | texto (`sim`/`nao`) | sem `state_class` | Sempre | `sim` quando `consumo_mensal_kwh < disponibilidade_minima_kwh` (`30`, `50` ou `100`). |
-| kWh adicionados para disponibilidade | `kwh_adicionados_disponibilidade` | `sensor.kwh_adicionados_para_disponibilidade` | kWh | `measurement` | Sempre | Para indicador geral: `max(disponibilidade_minima_kwh - consumo_mensal_kwh, 0)`. No SCEE, o credito usa a sobra apos compensacao. |
+| kWh adicionados para disponibilidade | `kwh_adicionados_disponibilidade` | `sensor.kwh_adicionados_para_disponibilidade` | kWh | `measurement` | Sempre | Indicador geral: `max(disponibilidade_minima_kwh - consumo_mensal_kwh, 0)`; nao gera credito SCEE. |
 | Saldo de creditos do mes anterior | `saldo_creditos_mes_anterior_kwh` | `sensor.saldo_creditos_do_mes_anterior` | kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Soma do registro persistido de creditos em kWh, consumindo primeiro os creditos mais antigos e expirando em 60 meses. |
-| Previsao de creditos gerados | `previsao_creditos_gerados_kwh` | `sensor.previsao_de_creditos_gerados` | kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `max(saldo_anterior - credito_consumido + credito_energia + credito_disponibilidade, 0)`, onde `credito_disponibilidade = max(minimo_kwh - energia_nao_compensada, 0)`. |
+| Previsao de creditos gerados | `previsao_creditos_gerados_kwh` | `sensor.previsao_de_creditos_gerados` | kWh | `measurement` | Quando houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | `max(saldo_anterior - credito_consumido + credito_energia, 0)`; a compensacao respeita o minimo faturavel antes de consumir creditos. |
 | Auto-consumo acumulado | `auto_consumo_kwh` | `sensor.auto_consumo_acumulado` | kWh | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | Com injecao configurada: `max(geracao_total - injecao_total, 0)`; sem injecao, usa estimativa mensal por geracao e credito de energia. |
 | Auto-consumo acumulado em reais | `auto_consumo_reais` | `sensor.auto_consumo_acumulado_em_reais` | R$ | `measurement` | Quando houver entidade de geracao e o grupo `Geracao/SCEE` estiver habilitado | `auto_consumo_kwh * tarifa_convencional_final_r_kwh`. |
 | Auto-consumo diario | `auto_consumo_diario_kwh` | `sensor.auto_consumo_diario` | kWh | `measurement` | Quando `diario` estiver habilitado, houver entidade de geracao ou injecao e o grupo `Geracao/SCEE` estiver habilitado | Com injecao configurada: `max(geracao_diaria - injecao_diaria, 0)`; sem injecao, usa estimativa diaria por geracao e credito de energia. |
@@ -371,12 +371,12 @@ Observacoes:
    - `fio_b_bruto = tusd_fio_b_r_mwh / 1000`
    - `fio_b_final = aplicar_tributos_por_dentro(fio_b_bruto * percentual_ano, ...)`
 8. SCEE:
-   - `energia_compensada = min(consumo, saldo_creditos + energia_nova)`
+   - `limite_compensacao = max(consumo - disponibilidade_minima_kwh, 0)`
+   - `energia_compensada = min(limite_compensacao, saldo_creditos + energia_nova)`
    - `energia_nao_compensada = max(consumo - energia_compensada, 0)`
    - `credito_consumido = min(saldo_creditos, energia_compensada)`
    - `credito_energia = max(energia_nova - energia_nova_consumida, 0)`
-   - `credito_disponibilidade = max(disponibilidade_minima_kwh - energia_nao_compensada, 0)`
-   - `previsao_creditos = max(saldo_creditos - credito_consumido + credito_energia + credito_disponibilidade, 0)`
+   - `previsao_creditos = max(saldo_creditos - credito_consumido + credito_energia, 0)`
    - `valor_consumo_scee = valor_energia_nao_compensada + valor_fio_b_compensada`
    - `valor_consumo_faturado = max(valor_disponibilidade, valor_consumo_scee)`
    - consumo, geracao e injecao acumulados agora sao apurados de forma incremental no tempo, com rateio por virada de dia/semana/ciclo mensal
@@ -407,7 +407,7 @@ Regra adicional implementada:
 ## Links de versao
 
 - [Runbook: coleta de stack do HA bloqueado](./docs/coleta_stack_ha_bloqueado.md)
-- [Documentacao tecnica da versao 0.3.0](./docs/releases/DOCUMENTACAO_CODIGO_0.3.0.md)
+- [Documentacao tecnica da versao 0.3.1](./docs/releases/DOCUMENTACAO_CODIGO_0.3.1.md)
 - [Changelog completo](./docs/releases/CHANGELOG.md)
-- [Release 0.3.0 no GitHub](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.3.0)
+- [Release 0.3.1 no GitHub](https://github.com/ceinmart/tarifas-energia-brasil/releases/tag/v0.3.1)
 - [Todas as releases](https://github.com/ceinmart/tarifas-energia-brasil/releases)

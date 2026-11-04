@@ -159,7 +159,7 @@ def test_scee_creditos_prioritarios():
     assert result["credito_gerado_kwh"] == pytest.approx(20)
 
 
-def test_scee_creditos_prioritarios_soma_disponibilidade_minima_apos_compensacao():
+def test_scee_consumo_abaixo_do_minimo_preserva_injecao():
     result = calc.calcular_scee_creditos_prioritarios(
         consumo_kwh=10,
         geracao_kwh=10,
@@ -169,14 +169,14 @@ def test_scee_creditos_prioritarios_soma_disponibilidade_minima_apos_compensacao
         valor_disponibilidade=90.0,
         disponibilidade_kwh=100,
     )
-    assert result["energia_compensada_kwh"] == pytest.approx(10)
-    assert result["energia_nao_compensada_kwh"] == pytest.approx(0)
-    assert result["kwh_adicionados_disponibilidade"] == pytest.approx(100)
-    assert result["credito_gerado_energia_kwh"] == pytest.approx(0)
-    assert result["credito_gerado_kwh"] == pytest.approx(100)
+    assert result["energia_compensada_kwh"] == pytest.approx(0)
+    assert result["energia_nao_compensada_kwh"] == pytest.approx(10)
+    assert result["kwh_adicionados_disponibilidade"] == pytest.approx(0)
+    assert result["credito_gerado_energia_kwh"] == pytest.approx(10)
+    assert result["credito_gerado_kwh"] == pytest.approx(10)
 
 
-def test_scee_creditos_prioritarios_disponibilidade_usa_consumo_nao_compensado():
+def test_scee_consumo_abaixo_do_minimo_nao_cria_credito_sintetico():
     result = calc.calcular_scee_creditos_prioritarios(
         consumo_kwh=80,
         geracao_kwh=30,
@@ -186,11 +186,34 @@ def test_scee_creditos_prioritarios_disponibilidade_usa_consumo_nao_compensado()
         valor_disponibilidade=90.0,
         disponibilidade_kwh=100,
     )
-    assert result["energia_compensada_kwh"] == pytest.approx(30)
-    assert result["energia_nao_compensada_kwh"] == pytest.approx(50)
-    assert result["kwh_adicionados_disponibilidade"] == pytest.approx(50)
-    assert result["credito_gerado_energia_kwh"] == pytest.approx(0)
-    assert result["credito_gerado_kwh"] == pytest.approx(50)
+    assert result["energia_compensada_kwh"] == pytest.approx(0)
+    assert result["energia_nao_compensada_kwh"] == pytest.approx(80)
+    assert result["kwh_adicionados_disponibilidade"] == pytest.approx(0)
+    assert result["credito_gerado_energia_kwh"] == pytest.approx(30)
+    assert result["credito_gerado_kwh"] == pytest.approx(30)
+
+
+def test_scee_faturas_cpfl_reservam_100_kwh_e_preservam_saldo():
+    for consumo, injecao, credito_anterior, compensado, saldo in (
+        (391, 293, 0, 291, 2),
+        (564, 193, 2, 195, 0),
+        (382, 306, 0, 282, 24),
+    ):
+        result = calc.calcular_scee_creditos_prioritarios(
+            consumo_kwh=consumo,
+            geracao_kwh=injecao,
+            credito_entrada_kwh=credito_anterior,
+            tarifa_convencional_final_r_kwh=0.95439792,
+            fio_b_final_r_kwh=0.21152724,
+            valor_disponibilidade=95.439792,
+            disponibilidade_kwh=100,
+        )
+        assert result["energia_compensada_kwh"] == pytest.approx(compensado)
+        assert result["energia_nao_compensada_kwh"] == pytest.approx(consumo - compensado)
+        assert (
+            credito_anterior - result["credito_consumido_kwh"] + result["credito_gerado_kwh"]
+        ) == pytest.approx(saldo)
+        assert result["valor_fio_b_compensada"] == pytest.approx(compensado * 0.21152724)
 
 
 def test_valor_conta_tarifa_branca_por_posto():

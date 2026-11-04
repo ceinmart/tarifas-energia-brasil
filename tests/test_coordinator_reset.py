@@ -704,10 +704,11 @@ def test_dynamic_valores_calculate_auto_consumo_from_generated_minus_injected():
         tipo_fornecimento="monofasico",
     )
 
-    assert valores["auto_consumo_kwh"] == pytest.approx(20.0)
-    assert valores["auto_consumo_reais"] == pytest.approx(18.0)
-    assert valores["auto_consumo_mensal_kwh"] == pytest.approx(20.0)
-    assert valores["auto_consumo_mensal_reais"] == pytest.approx(18.0)
+    assert valores["auto_consumo_kwh"] == pytest.approx(0.0)
+    assert valores["auto_consumo_reais"] == pytest.approx(0.0)
+    assert valores["auto_consumo_mensal_kwh"] == pytest.approx(0.0)
+    assert valores["auto_consumo_mensal_reais"] == pytest.approx(0.0)
+    assert valores["previsao_creditos_gerados_kwh"] == pytest.approx(50.0)
     assert "auto_consumo_diario_kwh" not in valores
 
 

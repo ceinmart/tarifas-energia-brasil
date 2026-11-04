@@ -1,3 +1,11 @@
+<!--
+Versão: v2
+Alterado em: 2026-11-04 09:30 -03:00
+Criado por: Codex (ChatGPT)
+Projeto / pasta: C:\tmp\ha.ext\tarifas\tarifas_energia_brasil
+Finalidade: Resumir os cálculos da extensão.
+-->
+
 # Calculos
 
 ## Conversao de unidade
@@ -46,9 +54,12 @@ Percentuais de transicao:
 - 2028: 90%
 - 2029+: 100%
 
-## SCEE (modelo inicial)
+## SCEE
 
-- `energia_compensada = min(consumo, geracao + credito_entrada)`
+- `limite_compensacao = max(consumo - disponibilidade_minima_kwh, 0)`
+- `energia_compensada = min(limite_compensacao, geracao + credito_entrada)`
 - `energia_nao_compensada = consumo - energia_compensada`
+- créditos antigos são consumidos antes da energia injetada no ciclo;
+- a injeção não usada permanece como crédito, sem acrescentar crédito sintético de disponibilidade;
 - `valor_consumo_scee = valor_energia_nao_compensada + valor_fio_b_compensada`
 - `valor_faturado = max(valor_disponibilidade, valor_consumo_scee)`

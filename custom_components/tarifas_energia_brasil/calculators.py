@@ -1,4 +1,5 @@
-"""Versao: 0.3.0
+"""Versao: 0.3.1
+Alterado em: 2026-11-04 10:00 -03:00 - Codex (ChatGPT)
 Alterado em: 2026-09-23 10:57 -03:00 - Codex (ChatGPT)
 Criado em: 2026-04-22 21:41:36 -03:00
 Criado por: Codex
@@ -339,22 +340,19 @@ def calcular_scee_creditos_prioritarios(
     valor_disponibilidade: float,
     disponibilidade_kwh: float = 0.0,
 ) -> dict[str, float]:
-    """Calcula SCEE consumindo creditos antigos antes da geracao nova."""
+    """Reserva a disponibilidade antes de consumir creditos antigos e injecao."""
 
     consumo = max(consumo_kwh, 0.0)
     geracao = max(geracao_kwh, 0.0)
     credito_entrada = max(credito_entrada_kwh, 0.0)
 
     energia_disponivel = credito_entrada + geracao
-    energia_compensada = min(consumo, energia_disponivel)
+    limite_compensacao = max(consumo - max(disponibilidade_kwh, 0.0), 0.0)
+    energia_compensada = min(limite_compensacao, energia_disponivel)
 
     credito_consumido = min(credito_entrada, energia_compensada)
     geracao_consumida = min(geracao, max(energia_compensada - credito_consumido, 0.0))
     energia_nao_compensada = max(consumo - energia_compensada, 0.0)
-    kwh_adicionados_disponibilidade = max(
-        max(disponibilidade_kwh, 0.0) - energia_nao_compensada,
-        0.0,
-    )
 
     valor_energia_nao_compensada = energia_nao_compensada * tarifa_convencional_final_r_kwh
     valor_fio_b_compensada = energia_compensada * fio_b_final_r_kwh
@@ -364,13 +362,13 @@ def calcular_scee_creditos_prioritarios(
     )
 
     credito_gerado_energia = max(geracao - geracao_consumida, 0.0)
-    credito_gerado = credito_gerado_energia + kwh_adicionados_disponibilidade
+    credito_gerado = credito_gerado_energia
 
     return {
         "energia_disponivel_para_compensar_kwh": energia_disponivel,
         "energia_compensada_kwh": energia_compensada,
         "energia_nao_compensada_kwh": energia_nao_compensada,
-        "kwh_adicionados_disponibilidade": kwh_adicionados_disponibilidade,
+        "kwh_adicionados_disponibilidade": 0.0,
         "credito_consumido_kwh": credito_consumido,
         "geracao_consumida_kwh": geracao_consumida,
         "credito_gerado_energia_kwh": credito_gerado_energia,
